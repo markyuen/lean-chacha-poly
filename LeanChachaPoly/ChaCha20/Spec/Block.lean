@@ -29,8 +29,12 @@ theorem u32ToLe_length (w : UInt32) : (u32ToLe w).length = 4 := by
 /-- Serializing 16 words produces 64 bytes. -/
 theorem serializeBlock_length (s : State) (h : s.size = 16) :
     (serializeBlock s).length = 64 := by
-  simp [serializeBlock, List.length_bind]
-  simp [Array.toList_size, h, u32ToLe_length]
+  have hs : s.toList.length = 16 := by simp [h]
+  have flatMap_len : ∀ (xs : List UInt32), (xs.flatMap u32ToLe).length = xs.length * 4 := fun xs => by
+    induction xs with
+    | nil => simp
+    | cons x xs ih => simp [u32ToLe_length, ih, Nat.succ_mul]; omega
+  simp [serializeBlock, flatMap_len, hs]
 
 /-- Adding two states of size 16 gives a state of size 16. -/
 theorem addStates_size (s t : State) (hs : s.size = 16) (ht : t.size = 16) :

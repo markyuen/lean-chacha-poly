@@ -12,15 +12,22 @@ open Test.Helpers Poly1305.Spec
 
 namespace Test.Poly1305Test
 
+private instance : Inhabited Key :=
+  ⟨{ bytes := List.replicate 32 0, size := by simp }⟩
+
 structure TV where
   name : String
   key  : Key
   msg  : List UInt8
   tag  : List UInt8
+  deriving Inhabited
 
-def mkKey (s : String) : Key := {
-  bytes := hexToList s
-  size  := by decide }
+def mkKey (s : String) : Key :=
+  let bs := hexToList s
+  { bytes := bs.take 32 ++ List.replicate (32 - min 32 bs.length) 0
+    size  := by
+      simp only [List.length_append, List.length_take, List.length_replicate]
+      omega }
 
 def tvs : List TV := [
   -- §2.5.2: primary "Cryptographic Forum Research Group" vector
@@ -43,12 +50,7 @@ def tvs : List TV := [
 
   -- A.3 #6: catch carry into bit 131
   { name := "A.3 #6: carry into bit 131"
-    key  := mkKey "01000000000000000000000000000000" ++
-                  "00000000000000000000000000000000"
-    -- note: mkKey takes a single string
     key  := mkKey "0100000000000000000000000000000000000000000000000000000000000000"
-    msg  := hexToList "ffffffffffffffffffffffffffffff" ++ hexToList "fb"
-    -- combined 16-byte msg: ff*15 + fb
     msg  := hexToList "fffffffffffffffffffffffffffffffb"
     tag  := hexToList "01000000000000000000000000000000" },
 

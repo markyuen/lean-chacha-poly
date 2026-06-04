@@ -62,18 +62,22 @@ def u32ToLe (w : UInt32) : List UInt8 :=
 
 /-! ## Quarter round (RFC 8439 §2.1) -/
 
+/-- Left rotate a 32-bit word by n bits. -/
+def rotl32 (x : UInt32) (n : UInt32) : UInt32 :=
+  (x <<< n) ||| (x >>> (32 - n))
+
 /-- The core ARX mixing step. -/
 def quarterRound (a b c d : UInt32) : UInt32 × UInt32 × UInt32 × UInt32 :=
-  let a := a + b; let d := (d ^^^ a).rotateLeft 16
-  let c := c + d; let b := (b ^^^ c).rotateLeft 12
-  let a := a + b; let d := (d ^^^ a).rotateLeft 8
-  let c := c + d; let b := (b ^^^ c).rotateLeft 7
+  let a := a + b; let d := rotl32 (d ^^^ a) 16
+  let c := c + d; let b := rotl32 (b ^^^ c) 12
+  let a := a + b; let d := rotl32 (d ^^^ a) 8
+  let c := c + d; let b := rotl32 (b ^^^ c) 7
   (a, b, c, d)
 
 /-- Apply a quarter round in-place to positions i,j,k,l of a State. -/
 def qr (s : State) (i j k l : Fin 16) : State :=
   let (a, b, c, d) := quarterRound s[i.val]! s[j.val]! s[k.val]! s[l.val]!
-  s |>.set i a |>.set j b |>.set k c |>.set l d
+  s.set! i.val a |>.set! j.val b |>.set! k.val c |>.set! l.val d
 
 /-! ## Block function (RFC 8439 §2.3) -/
 
@@ -114,7 +118,7 @@ def tenDoubleRounds (s : State) : State :=
 
 /-- Add two states word-by-word. -/
 def addStates (s t : State) : State :=
-  Array.zipWith s t (· + ·)
+  Array.zipWith (· + ·) s t
 
 /-- The full ChaCha20 block function:
     mix for 20 rounds, then add back the original state. -/
@@ -124,14 +128,14 @@ def chacha20Block (key : Key) (nonce : Nonce) (counter : UInt32) : State :=
 
 /-- Serialize a 16-word state to 64 bytes (little-endian). -/
 def serializeBlock (s : State) : List UInt8 :=
-  s.toList.bind u32ToLe
+  s.toList.flatMap u32ToLe
 
 /-! ## Keystream and encryption (RFC 8439 §2.4) -/
 
 /-- Generate `len` bytes of keystream. -/
 def keystream (key : Key) (nonce : Nonce) (counter : UInt32) (len : Nat) : List UInt8 :=
   let nBlocks := (len + 63) / 64
-  let stream := (List.range nBlocks).bind fun i =>
+  let stream := (List.range nBlocks).flatMap fun i =>
     serializeBlock (chacha20Block key nonce (counter + UInt32.ofNat i))
   stream.take len
 
@@ -172,16 +176,9 @@ theorem chacha20_length (key : Key) (nonce : Nonce)
     (chacha20 key nonce counter msg).length = msg.length := by
   sorry
 
-/-! ### C3: Keystream length -/
-theorem keystream_length (key : Key) (nonce : Nonce)
-    (counter : UInt32) (len : Nat) :
-    (keystream key nonce counter len).length = len := by
-  sorry
+/-! ### C3: Keystream length — proved in Spec.Keystream -/
 
-/-! ### C4: Block size -/
-theorem serializeBlock_length (s : State) :
-    (serializeBlock s).length = 64 := by
-  sorry
+/-! ### C4: Block size — proved in Spec.Block -/
 
 /-! ### C5: State size invariant -/
 theorem initState_size (key : Key) (nonce : Nonce) (counter : UInt32) :
@@ -194,10 +191,6 @@ theorem doubleRound_size (s : State) (h : s.size = 16) :
 
 theorem tenDoubleRounds_size (s : State) (h : s.size = 16) :
     (tenDoubleRounds s).size = 16 := by
-  sorry
-
-theorem chacha20Block_size (key : Key) (nonce : Nonce) (counter : UInt32) :
-    (chacha20Block key nonce counter).size = 16 := by
   sorry
 
 end ChaCha20.Spec

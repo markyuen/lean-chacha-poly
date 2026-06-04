@@ -14,10 +14,10 @@ involution proof.
 
 The proof reduces to:
   - We generate ⌈len/64⌉ blocks of 64 bytes each
-  - We bind them together (total = ⌈len/64⌉ × 64 bytes ≥ len)
+  - We flatMap them together (total = ⌈len/64⌉ × 64 bytes ≥ len)
   - We take the first `len` bytes
 
-The key arithmetic: `(List.bind ... serializeBlock).length = nBlocks * 64`,
+The key arithmetic: `(List.flatMap ... serializeBlock).length = nBlocks * 64`,
 and `(stream.take len).length = min len stream.length = len`
 when `stream.length ≥ len`.
 -/
@@ -29,16 +29,16 @@ namespace ChaCha20.Spec
 /-- Generating n blocks and serializing each gives n×64 bytes. -/
 theorem blockStream_length (key : Key) (nonce : Nonce)
     (counter : UInt32) (n : Nat) :
-    ((List.range n).bind fun i =>
+    ((List.range n).flatMap fun i =>
       serializeBlock (chacha20Block key nonce (counter + UInt32.ofNat i))).length
     = n * 64 := by
   induction n with
   | zero => simp
   | succ n ih =>
-    simp [List.range_succ, List.bind_append, List.length_append]
-    rw [ih]
+    rw [List.range_succ, List.flatMap_append, List.length_append, ih]
+    simp only [List.flatMap_singleton]
     rw [serializeBlock_length _ (chacha20Block_size key nonce _)]
-    ring
+    omega
 
 /-! ## Keystream length -/
 
@@ -46,15 +46,10 @@ theorem blockStream_length (key : Key) (nonce : Nonce)
 theorem keystream_length (key : Key) (nonce : Nonce)
     (counter : UInt32) (len : Nat) :
     (keystream key nonce counter len).length = len := by
-  simp [keystream]
-  rw [List.length_take]
-  rw [blockStream_length]
-  -- Need: min len (nBlocks * 64) = len
-  -- where nBlocks = (len + 63) / 64
-  -- This follows from (len + 63) / 64 * 64 ≥ len
+  simp only [keystream]
+  rw [List.length_take, blockStream_length]
   apply Nat.min_eq_left
-  calc len ≤ ((len + 63) / 64) * 64 := by omega
-    _ = _ := rfl
+  omega
 
 /-! ## Counter independence -/
 

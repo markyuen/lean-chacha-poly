@@ -13,11 +13,15 @@ open Test.Helpers Aead.Spec ChaCha20.Spec
 
 namespace Test.AeadTest
 
-def mkKey (s : String) : Key := {
-  bytes := hexToList s; size := by decide }
+def mkKey (s : String) : ChaCha20.Spec.Key :=
+  let bs := hexToList s
+  { bytes := bs.take 32 ++ List.replicate (32 - min 32 bs.length) 0
+    size  := by simp [List.length_append, List.length_take, List.length_replicate]; omega }
 
-def mkNonce (s : String) : Nonce := {
-  bytes := hexToList s; size := by decide }
+def mkNonce (s : String) : ChaCha20.Spec.Nonce :=
+  let bs := hexToList s
+  { bytes := bs.take 12 ++ List.replicate (12 - min 12 bs.length) 0
+    size  := by simp [List.length_append, List.length_take, List.length_replicate]; omega }
 
 -- ── §2.6.2 Poly1305 key generation ────────────────────────────
 
@@ -93,7 +97,7 @@ def runTests : IO Unit := do
   group "tamper detection" do
     let ct := encrypt aeKey aeNonce aePt aeAad
     -- Flip one bit in the ciphertext (not the tag)
-    let tampered := ct.set 0 (ct.get! 0 ^^^ 0x01)
+    let tampered := ct.set 0 (ct[0]! ^^^ 0x01)
     let pt := decrypt aeKey aeNonce tampered aeAad
     return [← checkBool "tampered ct rejected" (pt == none)]
 

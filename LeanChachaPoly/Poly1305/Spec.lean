@@ -29,7 +29,7 @@ namespace Poly1305.Spec
 /-- 2¹³⁰ - 5. The largest prime below 2¹³⁰. -/
 def P : Nat := 2^130 - 5
 
-theorem P_pos : 0 < P := by norm_num [P]
+theorem P_pos : 0 < P := by native_decide
 
 /-! ## Key structure (RFC 8439 §2.5.1) -/
 
@@ -42,7 +42,7 @@ structure Key where
 /-- Deserialize 16 bytes as a little-endian `Nat`. -/
 def leToNat16 (bs : List UInt8) (h : bs.length = 16) : Nat :=
   (List.finRange 16).foldl (fun acc i =>
-    acc + (bs.get (i.cast h)).toNat * 2^(i.val * 8)) 0
+    acc + (bs.get (i.cast h.symm)).toNat * 2^(i.val * 8)) 0
 
 /-- Clamp `r`: clear specific bits per RFC 8439 §2.5.1.
     Clamping ensures certain bits of r are zero, which prevents
@@ -84,7 +84,19 @@ where
       if h : block.length = 16 then
         blockToNat block h :: go rest
       else
-        [finalBlockToNat block (by omega)]
+        [finalBlockToNat block (by
+          have : block.length ≤ 16 := by
+            simp only [block, List.length_take]
+            exact Nat.min_le_left _ _
+          omega)]
+  termination_by bs => bs.length
+  decreasing_by
+    simp only [rest, List.length_drop]
+    have hlen : bs.length ≥ 16 := by
+      have htake := @List.length_take UInt8 16 bs
+      simp only [block] at h
+      omega
+    omega
 
 /-! ## Accumulation (RFC 8439 §2.5.1) -/
 
@@ -126,13 +138,19 @@ theorem poly1305_length (key : Key) (msg : List UInt8) :
 /-! ### P2: accumulate stays in field -/
 theorem step_lt_P (r acc block : Nat) : step r acc block < P := by
   simp [step, P]
-  exact Nat.mod_lt _ (by norm_num)
+  exact Nat.mod_lt _ (by native_decide)
 
 theorem accumulate_lt_P (r : Nat) (blocks : List Nat) :
     accumulate r blocks < P := by
-  induction blocks using List.foldl.induct (f := step r) (init := 0) with
-  | base => simp [accumulate, P]; norm_num
-  | step acc block rest ih => exact step_lt_P r acc block
+  unfold accumulate
+  suffices h : ∀ acc, acc < P → blocks.foldl (step r) acc < P from
+    h 0 P_pos
+  intro acc hacc
+  induction blocks generalizing acc with
+  | nil => simpa
+  | cons block rest ih =>
+    simp only [List.foldl_cons]
+    exact ih _ (step_lt_P r acc block)
 
 /-! ### P3: Accumulation over append (streaming compositionality) -/
 theorem accumulate_append (r : Nat) (xs ys : List Nat) :
@@ -144,11 +162,12 @@ theorem accumulate_append (r : Nat) (xs ys : List Nat) :
 theorem poly1305_empty (key : Key) :
     poly1305 key [] =
       natToLe16 (extractS key % 2^128) := by
-  simp [poly1305, toBlocks, toBlocks.go, accumulate]
+  have h : toBlocks [] = [] := by native_decide
+  simp [poly1305, h, accumulate]
 
 /-! ### P5: Clamped r is bounded -/
 theorem clamp_lt (r : Nat) : clamp r < 2^128 := by
-  simp [clamp]
-  omega
+  unfold clamp
+  exact Nat.lt_of_le_of_lt Nat.and_le_right (by native_decide)
 
 end Poly1305.Spec

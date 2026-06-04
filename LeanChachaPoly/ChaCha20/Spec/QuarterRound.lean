@@ -29,15 +29,14 @@ open ChaCha20.Spec
 
 /-! ## Rotation lemmas -/
 
-/-- Left rotation by n and right rotation by (32-n) are inverse. -/
-theorem rotateLeft_rotateRight (n : UInt32) (x : UInt32)
-    (hn : n.toNat < 32) :
-    (x.rotateLeft n).rotateRight n = x := by
+/-- rotl32 by n and then by (32-n) is identity. -/
+theorem rotl32_inv (n : UInt32) (x : UInt32) (hn : n.toNat < 32) :
+    rotl32 (rotl32 x n) (32 - n) = x := by
   sorry
 
-/-- Rotation distributes over XOR. -/
-theorem rotateLeft_xor (n : UInt32) (x y : UInt32) :
-    (x ^^^ y).rotateLeft n = (x.rotateLeft n) ^^^ (y.rotateLeft n) := by
+/-- rotl32 distributes over XOR. -/
+theorem rotl32_xor (n : UInt32) (x y : UInt32) :
+    rotl32 (x ^^^ y) n = (rotl32 x n) ^^^ (rotl32 y n) := by
   sorry
 
 /-! ## XOR cancellation -/
@@ -73,6 +72,6 @@ theorem quarterRound_test_vector :
 /-! ## State operation: qr preserves size -/
 theorem qr_size (s : State) (i j k l : Fin 16) (h : s.size = 16) :
     (qr s i j k l).size = 16 := by
-  simp [qr, Array.size_set, h]
+  simp [qr, h]
 
 end ChaCha20.Spec

@@ -25,7 +25,8 @@ def bytesToHex (bs : List UInt8) : String :=
   let d (n : Nat) : Char :=
     if n < 10 then Char.ofNat ('0'.toNat + n)
     else Char.ofNat ('a'.toNat + n - 10)
-  bs.foldl (fun acc b => acc ++ ⟨[d (b.toNat / 16), d (b.toNat % 16)]⟩) ""
+  bs.foldl (fun acc b =>
+    acc ++ String.singleton (d (b.toNat / 16)) ++ String.singleton (d (b.toNat % 16))) ""
 
 def check (name : String) (expected actual : List UInt8) : IO Bool := do
   if expected == actual then

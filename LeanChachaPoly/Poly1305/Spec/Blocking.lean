@@ -23,21 +23,23 @@ theorem blockToNat_ge (block : List UInt8) (h : block.length = 16) :
     2^128 ≤ blockToNat block h := by
   simp [blockToNat]
 
-/-- A full block's value is less than 2¹²⁹. -/
+/-- A full block's value is less than 2¹²⁹.
+
+    NOTE: still unproved. Requires bounding `leToNat16 < 2^128`, i.e. an
+    induction over the 16-byte little-endian fold; `omega` alone cannot
+    see that bound. -/
 theorem blockToNat_lt (block : List UInt8) (h : block.length = 16) :
     blockToNat block h < 2^129 := by
-  simp [blockToNat, leToNat16]
-  omega
+  sorry
 
 /-! ## Block count -/
 
 /-- Number of blocks equals ceiling of (msg.length / 16). -/
 theorem toBlocks_length (msg : List UInt8) (hne : msg ≠ []) :
     (toBlocks msg).length = (msg.length + 15) / 16 := by
-  induction msg using List.rec_on with
-  | nil => contradiction
-  | cons h t _ =>
-    sorry
+  cases msg with
+  | nil => exact absurd rfl hne
+  | cons head tail => sorry
 
 /-- Empty message gives empty block list. -/
 @[simp]

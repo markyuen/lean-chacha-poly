@@ -18,11 +18,11 @@ open ChaCha20.Spec
 
 def keyFromByteArray (b : ByteArray) (h : b.size = 32) : Key :=
   { bytes := b.data.toList,
-    size := by simp [ByteArray.size] at h; simpa [Array.size_toList] using h }
+    size := by rw [Array.length_toList]; exact h }
 
 def nonceFromByteArray (b : ByteArray) (h : b.size = 12) : Nonce :=
   { bytes := b.data.toList,
-    size := by simp [ByteArray.size] at h; simpa [Array.size_toList] using h }
+    size := by rw [Array.length_toList]; exact h }
 
 /-! ## ByteArray operations -/
 
@@ -37,20 +37,20 @@ def keystream (key : Key) (nonce : Nonce) (counter : UInt32) (len : Nat) : ByteA
 
 /-! ## Bridge theorems -/
 
-/-- Native encrypt output length equals input length. -/
-theorem chacha20_size (key : Key) (nonce : Nonce) (counter : UInt32)
-    (msg : ByteArray) :
-    (chacha20 key nonce counter msg).size = msg.size := by
-  simp [chacha20, ByteArray.size]
-  rw [Array.size_toArray, Spec.chacha20_length]
-  simp [ByteArray.size]
-
 /-- Native encrypt equals spec encrypt on toList. -/
 theorem chacha20_eq_spec (key : Key) (nonce : Nonce) (counter : UInt32)
     (msg : ByteArray) :
     (chacha20 key nonce counter msg).data.toList =
     Spec.chacha20 key nonce counter msg.data.toList := by
-  simp [chacha20, Array.toList_toArray]
+  simp [chacha20]
+
+/-- Native encrypt output length equals input length. -/
+theorem chacha20_size (key : Key) (nonce : Nonce) (counter : UInt32)
+    (msg : ByteArray) :
+    (chacha20 key nonce counter msg).size = msg.size := by
+  show (chacha20 key nonce counter msg).data.size = msg.data.size
+  rw [← Array.length_toList, ← Array.length_toList, chacha20_eq_spec,
+      Spec.chacha20_length]
 
 /-! ## Derived capstone theorems -/
 
@@ -59,8 +59,8 @@ theorem chacha20_involutive (key : Key) (nonce : Nonce)
     (counter : UInt32) (msg : ByteArray) :
     chacha20 key nonce counter (chacha20 key nonce counter msg) = msg := by
   apply ByteArray.ext
+  apply Array.toList_inj.mp
   rw [chacha20_eq_spec, chacha20_eq_spec]
-  · exact Spec.chacha20_involutive key nonce counter msg.data.toList
-  · rw [chacha20_size]
+  exact Spec.chacha20_involutive key nonce counter msg.data.toList
 
 end ChaCha20.Native

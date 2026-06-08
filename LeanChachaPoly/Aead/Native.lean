@@ -28,7 +28,15 @@ theorem encrypt_eq_spec (key : Key) (nonce : Nonce)
     (encrypt key nonce plaintext aad).data.toList =
       Aead.Spec.encrypt key nonce
         plaintext.data.toList aad.data.toList := by
-  simp [encrypt, Array.toList_toArray]
+  simp [encrypt]
+
+theorem decrypt_eq_spec (key : Key) (nonce : Nonce)
+    (ciphertextAndTag aad : ByteArray) :
+    decrypt key nonce ciphertextAndTag aad =
+      (Aead.Spec.decrypt key nonce
+        ciphertextAndTag.data.toList aad.data.toList).map
+        (fun bs => ByteArray.mk bs.toArray) := by
+  simp [decrypt]
 
 /-! ## Derived capstone -/
 
@@ -38,6 +46,6 @@ theorem decrypt_encrypt (key : Key) (nonce : Nonce)
     = some plaintext := by
   simp [decrypt, encrypt_eq_spec]
   rw [Aead.Spec.decrypt_encrypt]
-  simp [Option.map, ByteArray.ext_iff, Array.toList_toArray]
+  simp [ByteArray.ext_iff]
 
 end Aead.Native

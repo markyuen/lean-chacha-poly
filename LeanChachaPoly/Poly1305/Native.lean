@@ -19,13 +19,12 @@ def poly1305 (key : Key) (msg : ByteArray) : ByteArray :=
 theorem poly1305_eq_spec (key : Key) (msg : ByteArray) :
     (poly1305 key msg).data.toList =
       Spec.poly1305 key msg.data.toList := by
-  simp [poly1305, Array.toList_toArray]
+  simp [poly1305]
 
 /-! ## Derived properties -/
 
 theorem poly1305_size (key : Key) (msg : ByteArray) :
     (poly1305 key msg).size = 16 := by
-  simp [poly1305, ByteArray.size, Array.size_toArray,
-        List.length_toArray, Spec.poly1305_length]
+  simp [poly1305, ByteArray.size, Spec.poly1305_length]
 
 end Poly1305.Native

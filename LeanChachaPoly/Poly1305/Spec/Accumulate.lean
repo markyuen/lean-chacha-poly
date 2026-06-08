@@ -33,26 +33,23 @@ namespace Poly1305.Spec
 
 /-! ## Polynomial evaluation -/
 
-/-- Closed-form polynomial evaluation at point r over GF(P). -/
+/-- Closed-form polynomial evaluation at point r over GF(P).
+    `zipIdx` pairs each block with its index as `(block, i)`. -/
 def evalPoly (r : Nat) (blocks : List Nat) : Nat :=
-  blocks.enum.foldl (fun acc (i, m) =>
+  blocks.zipIdx.foldl (fun acc (m, i) =>
     (acc + m * Nat.pow r (blocks.length - i)) % P) 0
 
 /-! ## The equivalence theorem -/
 
 /-- The iterative accumulation computes the same value as
-    the closed-form polynomial evaluation. -/
+    the closed-form polynomial evaluation.
+
+    NOTE: still unproved. The original proof relied on `ring_nf`
+    (a Mathlib tactic unavailable in this pure-stdlib project) and on
+    the removed `List.enum_append` lemma. -/
 theorem accumulate_eq_poly (r : Nat) (blocks : List Nat) :
     accumulate r blocks = evalPoly r blocks := by
-  induction blocks using List.reverseRecOn with
-  | nil => simp [accumulate, evalPoly]
-  | snoc bs b ih =>
-    rw [accumulate_append]
-    simp [accumulate, List.foldl, step]
-    rw [ih]
-    simp [evalPoly, List.enum_append]
-    ring_nf
-    sorry -- Algebraic identity: foldl with new block = poly shift
+  sorry -- Algebraic identity: foldl with new block = poly shift
 
 /-! ## Linearity: accumulate is linear in each block -/
 

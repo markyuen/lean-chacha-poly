@@ -127,7 +127,19 @@ theorem decrypt_encrypt (key : Key) (nonce : Nonce)
     (plaintext aad : List UInt8) :
     decrypt key nonce (encrypt key nonce plaintext aad) aad
     = some plaintext := by
-  sorry
+  have htag : (poly1305 (derivePolyKey key nonce)
+      (macData aad (chacha20 key nonce 1 plaintext))).length = 16 :=
+    poly1305_length _ _
+  unfold encrypt decrypt
+  -- The ciphertext+tag is at least 16 bytes, so the length guard fails.
+  rw [if_neg (by rw [List.length_append, htag]; omega)]
+  -- ctLen = (ct ++ tag).length - 16 = ct.length; take/drop split ct and tag.
+  simp only [List.length_append, htag, Nat.add_sub_cancel,
+    List.take_append_of_le_length (Nat.le_refl _), List.take_length,
+    List.drop_append_of_le_length (Nat.le_refl _), List.drop_length,
+    List.nil_append, beq_self_eq_true, if_true]
+  -- result = some (chacha20 1 (chacha20 1 plaintext)) = some plaintext.
+  rw [chacha20_involutive]
 
 /-! ### A2: Ciphertext length -/
 theorem encrypt_length (key : Key) (nonce : Nonce)

@@ -58,10 +58,22 @@ theorem accumulate_single (r m : Nat) :
     accumulate r [m] = (m * r) % P := by
   simp [accumulate, step]
 
-/-- Prepending a block shifts the polynomial degree. -/
+/-- Prepending a block shifts the polynomial degree: the new (first) block
+    `m` is multiplied by the highest power of `r`.
+
+    NOTE: the statement was previously **incorrect** — it gave `m` the power
+    `r¹` and `accumulate rest` the power `rⁿ`, but `foldl` processes the head
+    first, so `m` actually accrues the *highest* power `r^(rest.length+1)`.
+    (Counterexample to the old form: `r=3, m=1, rest=[2]` gives
+    `accumulate = 15` but the old RHS evaluated to `21`.)
+
+    Still unproved: needs an "initial-value distribution" lemma
+    `bs.foldl (step r) s = (s·r^bs.length + accumulate r bs) % P`, whose proof
+    is manual modular arithmetic (`Nat.add_mod`/`Nat.mul_mod`) — `Nat.ModEq`
+    is unavailable in this pure-stdlib project. -/
 theorem accumulate_cons (r m : Nat) (rest : List Nat) :
     accumulate r (m :: rest) =
-      (((m + 0) * r + accumulate r rest * Nat.pow r rest.length)) % P := by
+      (m * Nat.pow r (rest.length + 1) + accumulate r rest) % P := by
   sorry
 
 end Poly1305.Spec

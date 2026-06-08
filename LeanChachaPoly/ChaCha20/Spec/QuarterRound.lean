@@ -1,4 +1,5 @@
 import LeanChachaPoly.ChaCha20.Spec
+import Std.Tactic.BVDecide
 
 /-!
 # ChaCha20 Quarter Round Properties
@@ -30,14 +31,14 @@ open ChaCha20.Spec
 /-! ## Rotation lemmas -/
 
 /-- rotl32 by n and then by (32-n) is identity. -/
-theorem rotl32_inv (n : UInt32) (x : UInt32) (hn : n.toNat < 32) :
+theorem rotl32_inv (n : UInt32) (x : UInt32) (_hn : n.toNat < 32) :
     rotl32 (rotl32 x n) (32 - n) = x := by
-  sorry
+  unfold rotl32; bv_decide
 
 /-- rotl32 distributes over XOR. -/
 theorem rotl32_xor (n : UInt32) (x y : UInt32) :
     rotl32 (x ^^^ y) n = (rotl32 x n) ^^^ (rotl32 y n) := by
-  sorry
+  unfold rotl32; bv_decide
 
 /-! ## XOR cancellation -/
 

@@ -174,17 +174,15 @@ def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
       = xorBytes (xorBytes msg ks) ks     [unfold twice]
       = msg                                [xorBytes_self_cancel]
     where ks = keystream k n ctr msg.length, and the length
-    argument is satisfied by keystream_length. -/
-theorem chacha20_involutive (key : Key) (nonce : Nonce)
-    (counter : UInt32) (msg : List UInt8) :
-    chacha20 key nonce counter (chacha20 key nonce counter msg) = msg := by
-  sorry
+    argument is satisfied by keystream_length.
 
-/-! ### C2: Length preservation -/
-theorem chacha20_length (key : Key) (nonce : Nonce)
-    (counter : UInt32) (msg : List UInt8) :
-    (chacha20 key nonce counter msg).length = msg.length := by
-  sorry
+    `chacha20_involutive` (C1) and `chacha20_length` (C2) are proved in
+    `ChaCha20.Spec.Keystream`: their proofs need `xorBytes_self_cancel`
+    (Spec.Xor) and `keystream_length` (Spec.Keystream), which both import
+    this file, so they cannot be discharged here without a cyclic import.
+    They keep the `ChaCha20.Spec.*` qualified name regardless of file. -/
+
+/-! ### C2: Length preservation — proved in Spec.Keystream -/
 
 /-! ### C3: Keystream length — proved in Spec.Keystream -/
 

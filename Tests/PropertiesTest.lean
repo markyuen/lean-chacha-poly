@@ -1,4 +1,4 @@
-import Test.Helpers
+import Tests.Helpers
 import LeanChachaPoly.ChaCha20.Spec
 import LeanChachaPoly.Poly1305.Spec
 import LeanChachaPoly.Aead.Spec
@@ -14,9 +14,9 @@ tampering. The library states most of these as theorems
 `decrypt_encrypt_empty`, …); here we check them computationally.
 -/
 
-open Test.Helpers ChaCha20.Spec Poly1305.Spec Aead.Spec
+open Tests.Helpers ChaCha20.Spec Poly1305.Spec Aead.Spec
 
-namespace Test.PropertiesTest
+namespace Tests.PropertiesTest
 
 /-! ## Fixtures (reused RFC vectors) -/
 
@@ -76,4 +76,4 @@ def runTests : IO Unit := do
 
   IO.println ""
 
-end Test.PropertiesTest
+end Tests.PropertiesTest

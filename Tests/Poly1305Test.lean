@@ -1,4 +1,4 @@
-import Test.Helpers
+import Tests.Helpers
 import LeanChachaPoly.Poly1305.Spec
 
 /-!
@@ -8,9 +8,9 @@ Strict 1:1 port of `poly1305_test.go` (TestPoly1305GenerateTag):
 §2.5.2 and Appendix A.3 #1–#11.
 -/
 
-open Test.Helpers Poly1305.Spec
+open Tests.Helpers Poly1305.Spec
 
-namespace Test.Poly1305Test
+namespace Tests.Poly1305Test
 
 structure TV where
   name : String
@@ -110,4 +110,4 @@ def runTests : IO Unit := do
     return results.toList
   IO.println ""
 
-end Test.Poly1305Test
+end Tests.Poly1305Test

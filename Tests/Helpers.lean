@@ -8,7 +8,7 @@ Hex/ASCII decoding, byte/word comparison, grouped reporting, and smart
 constructors for the `Key`/`Nonce` types used throughout the test vectors.
 -/
 
-namespace Test.Helpers
+namespace Tests.Helpers
 
 /-! ## Decoding -/
 
@@ -105,4 +105,4 @@ def mkNonce (s : String) : ChaCha20.Spec.Nonce :=
 def mkPolyKey (s : String) : Poly1305.Spec.Key :=
   (Poly1305.Spec.Key.ofBytes? (hexToList s)).get!
 
-end Test.Helpers
+end Tests.Helpers

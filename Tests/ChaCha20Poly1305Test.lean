@@ -1,4 +1,4 @@
-import Test.Helpers
+import Tests.Helpers
 import LeanChachaPoly.Aead.Spec
 
 /-!
@@ -15,9 +15,9 @@ equivalent `derivePolyKey key nonce` (ChaCha20 counter-0 keystream, first 32
 bytes), so the KeyGen vectors are checked through it.
 -/
 
-open Test.Helpers Aead.Spec
+open Tests.Helpers Aead.Spec
 
-namespace Test.ChaCha20Poly1305Test
+namespace Tests.ChaCha20Poly1305Test
 
 /-! ## TestChaCha20Poly1305Poly1305KeyGen -/
 
@@ -122,4 +122,4 @@ def runTests : IO Unit := do
 
   IO.println ""
 
-end Test.ChaCha20Poly1305Test
+end Tests.ChaCha20Poly1305Test

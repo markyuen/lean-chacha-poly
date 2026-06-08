@@ -1,4 +1,4 @@
-import Test.Helpers
+import Tests.Helpers
 import LeanChachaPoly.ChaCha20.Spec
 
 /-!
@@ -10,9 +10,9 @@ Strict 1:1 port of the Go suite:
                              → TestChaCha20XORWithKeyStream (§2.4.2, A.2 #1–3, enc+dec)
 -/
 
-open Test.Helpers ChaCha20.Spec
+open Tests.Helpers ChaCha20.Spec
 
-namespace Test.ChaCha20Test
+namespace Tests.ChaCha20Test
 
 /-! ## TestChaCha20QuarterRound -/
 
@@ -186,4 +186,4 @@ def runTests : IO Unit := do
 
   IO.println ""
 
-end Test.ChaCha20Test
+end Tests.ChaCha20Test

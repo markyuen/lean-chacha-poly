@@ -1,0 +1,49 @@
+import LeanChachaPoly.ChaCha20.Spec.Keystream
+import Mathlib
+
+/-!
+# ChaCha20 CTR Seekability
+
+`keystream_counter_shift`: the keystream at a shifted counter equals the tail of
+a longer keystream — i.e. ChaCha20 in counter mode is *seekable* / random-access.
+The counter indexes 64-byte blocks consistently.
+
+Declared in `ChaCha20.Spec` (so it keeps that qualified name) but proved here,
+since the list/arithmetic reasoning uses Mathlib — kept out of the Mathlib-free
+capstone chain.
+-/
+
+namespace ChaCha20.Spec
+
+set_option maxHeartbeats 2000000 in
+/-- The keystream from counter `ctr + offset` over `len` bytes is the tail
+    (after `offset·64` bytes) of the keystream from `ctr` over `len + offset·64`
+    bytes. Dropping `offset·64` bytes = skipping `offset` whole 64-byte blocks. -/
+theorem keystream_counter_shift (key : Key) (nonce : Nonce)
+    (ctr : UInt32) (len offset : Nat) :
+    keystream key nonce (ctr + UInt32.ofNat offset) len =
+    (keystream key nonce ctr (len + offset * 64)).drop (offset * 64) := by
+  simp only [keystream]
+  have hnR : (len + offset * 64 + 63) / 64 = offset + (len + 63) / 64 := by omega
+  rw [hnR, List.range_add, List.flatMap_append]
+  have hAlen : ((List.range offset).flatMap
+      (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))).length
+      = offset * 64 := blockStream_length key nonce ctr offset
+  have hmap : (List.map (fun x => offset + x) (List.range ((len + 63) / 64))).flatMap
+      (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))
+      = (List.range ((len + 63) / 64)).flatMap
+          (fun i => serializeBlock
+            (chacha20Block key nonce ((ctr + UInt32.ofNat offset) + UInt32.ofNat i))) := by
+    rw [List.flatMap_map]; apply List.flatMap_congr; intro x _
+    congr 2; rw [UInt32.ofNat_add, add_assoc]
+  rw [hmap,
+    show len + offset * 64 = ((List.range offset).flatMap
+        (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))).length + len
+      from by rw [hAlen]; ring,
+    show offset * 64 = ((List.range offset).flatMap
+        (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))).length
+      from hAlen.symm,
+    List.drop_take]
+  simp [List.drop_left, Nat.add_sub_cancel_left]
+
+end ChaCha20.Spec

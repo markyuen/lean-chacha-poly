@@ -52,16 +52,12 @@ theorem keystream_length (key : Key) (nonce : Nonce)
   apply Nat.min_eq_left
   omega
 
-/-! ## Counter independence -/
+/-! ## Counter independence
 
-/-- Different counter values produce the keystream for the
-    corresponding block offset. This is used when reasoning
-    about multi-block messages. -/
-theorem keystream_counter_shift (key : Key) (nonce : Nonce)
-    (ctr : UInt32) (len offset : Nat) :
-    keystream key nonce (ctr + UInt32.ofNat offset) len =
-    (keystream key nonce ctr (len + offset * 64)).drop (offset * 64) := by
-  sorry
+    `keystream_counter_shift` (CTR seekability) is proved in
+    `ChaCha20.Spec.Seek`, which imports Mathlib — kept out of this file so the
+    capstone chain (`chacha20_involutive`/`chacha20_length`, below) stays
+    Mathlib-free. It keeps the `ChaCha20.Spec.*` qualified name. -/
 
 /-! ## Capstones C1 & C2 (declared in `ChaCha20.Spec`)
 

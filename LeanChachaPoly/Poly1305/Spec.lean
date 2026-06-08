@@ -72,7 +72,7 @@ def blockToNat (block : List UInt8) (h : block.length = 16) : Nat :=
 
 /-- The last (possibly partial) block: also gets a high bit but
     at position `block.length * 8`, not 128. -/
-def finalBlockToNat (block : List UInt8) (h : block.length ≤ 16) : Nat :=
+def finalBlockToNat (block : List UInt8) (_ : block.length ≤ 16) : Nat :=
   (List.finRange block.length).foldl (fun acc i =>
     acc + (block.get i).toNat * 2^(i.val * 8)) 0
   + 2^(block.length * 8)
@@ -96,7 +96,7 @@ where
           omega)]
   termination_by bs => bs.length
   decreasing_by
-    simp only [rest, List.length_drop]
+    simp only [List.length_drop]
     have hlen : bs.length ≥ 16 := by
       have htake := @List.length_take UInt8 16 bs
       simp only [block] at h

@@ -86,7 +86,7 @@ def encrypt (key : Key) (nonce : Nonce)
     `none` if the tag does not match. -/
 def decrypt (key : Key) (nonce : Nonce)
     (ciphertextAndTag aad : List UInt8) : Option (List UInt8) :=
-  if h : ciphertextAndTag.length < 16 then none
+  if ciphertextAndTag.length < 16 then none
   else
     let ctLen      := ciphertextAndTag.length - 16
     let ciphertext := ciphertextAndTag.take ctLen

@@ -52,11 +52,6 @@ theorem xor_self_cancel (x y : UInt32) : (x ^^^ y) ^^^ y = x := by
 theorem quarterRound_deterministic (a b c d : UInt32) :
     quarterRound a b c d = quarterRound a b c d := rfl
 
-/-- The output of quarterRound has the same type as the input. -/
-theorem quarterRound_type (a b c d : UInt32) :
-    let (a', b', c', d') := quarterRound a b c d
-    True := trivial
-
 /-! ## RFC 8439 §2.1.1 test vector
 
     Input:  a=0x11111111, b=0x01020304, c=0x9b8d6f43, d=0x01234567

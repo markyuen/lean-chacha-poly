@@ -197,10 +197,13 @@ theorem initState_size (key : Key) (nonce : Nonce) (counter : UInt32) :
 
 theorem doubleRound_size (s : State) (h : s.size = 16) :
     (doubleRound s).size = 16 := by
-  sorry
+  simp [doubleRound, qr]
+  exact h
 
 theorem tenDoubleRounds_size (s : State) (h : s.size = 16) :
     (tenDoubleRounds s).size = 16 := by
-  sorry
+  simp [tenDoubleRounds]
+  repeat rw [doubleRound_size]
+  exact h
 
 end ChaCha20.Spec

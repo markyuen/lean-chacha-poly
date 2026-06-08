@@ -38,6 +38,16 @@ structure Nonce where
   bytes : List UInt8
   size  : bytes.length = 12
 
+/-- Build a `Key` from a byte list, returning `none` unless it is exactly
+    32 bytes. -/
+def Key.ofBytes? (bs : List UInt8) : Option Key :=
+  if h : bs.length = 32 then some { bytes := bs, size := h } else none
+
+/-- Build a `Nonce` from a byte list, returning `none` unless it is exactly
+    12 bytes. -/
+def Nonce.ofBytes? (bs : List UInt8) : Option Nonce :=
+  if h : bs.length = 12 then some { bytes := bs, size := h } else none
+
 /-- The ChaCha20 internal state: 16 × UInt32 words. -/
 abbrev State := Array UInt32
 

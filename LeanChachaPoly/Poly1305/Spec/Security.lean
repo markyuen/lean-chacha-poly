@@ -216,4 +216,150 @@ theorem msgPoly_natDegree_le (B : List Nat) : (msgPoly B).natDegree ≤ B.length
   intro m hm
   exact msgPoly_coeff_high B m hm
 
+/-! ## The difference polynomial is nonzero
+
+    Distinct block lists give distinct polynomials, so `msgPoly B − msgPoly B'`
+    is nonzero — provided the blocks are field elements (`< P`) and nonzero
+    (which `toBlocks` guarantees). This is what makes the collision set finite. -/
+
+/-- `Nat.cast` into `ZMod P` is injective on `[0, P)`. -/
+private theorem cast_inj_of_lt {x y : Nat} (hx : x < P) (hy : y < P)
+    (h : (x : ZMod P) = (y : ZMod P)) : x = y := by
+  have hmod := (ZMod.natCast_eq_natCast_iff x y P).mp h
+  unfold Nat.ModEq at hmod
+  rwa [Nat.mod_eq_of_lt hx, Nat.mod_eq_of_lt hy] at hmod
+
+/-- A nonzero block (`0 < x < P`) has nonzero image in `ZMod P`. -/
+private theorem cast_ne_zero_of_pos_lt {x : Nat} (hpos : 0 < x) (hlt : x < P) :
+    (x : ZMod P) ≠ 0 := by
+  intro h
+  have hx0 : x = 0 := cast_inj_of_lt hlt P_pos (by simpa using h)
+  omega
+
+/-- An in-range reverse-indexed block is a member of the original list. -/
+private theorem getD_reverse_mem (B : List Nat) (k : Nat) (hk : k < B.length) :
+    B.reverse.getD k 0 ∈ B := by
+  rw [List.getD_eq_getElem _ _ (by rwa [List.length_reverse])]
+  exact List.mem_reverse.mp (List.getElem_mem _)
+
+/-- When `B` is strictly longer, the two polynomials differ at degree `|B|`:
+    `msgPoly B` has the nonzero leading block there, `msgPoly B'` has `0`. -/
+private theorem coeff_top_ne (B B' : List Nat) (hpos : ∀ b ∈ B, 0 < b ∧ b < P)
+    (hlt : B'.length < B.length) :
+    (msgPoly B).coeff B.length ≠ (msgPoly B').coeff B.length := by
+  rw [msgPoly_coeff B B.length, if_pos (by omega), msgPoly_coeff_high B' B.length hlt]
+  have hmem : B.reverse.getD (B.length - 1) 0 ∈ B := getD_reverse_mem B (B.length - 1) (by omega)
+  exact cast_ne_zero_of_pos_lt (hpos _ hmem).1 (hpos _ hmem).2
+
+/-- **Distinct messages ⇒ distinct polynomials.** With field-element, nonzero
+    blocks, `B ≠ B'` forces `msgPoly B ≠ msgPoly B'`: either a length mismatch
+    exposes a nonzero leading coefficient, or (same length) some block differs
+    and the cast is injective. -/
+theorem msgPoly_ne (B B' : List Nat)
+    (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
+    (hne : B ≠ B') : msgPoly B ≠ msgPoly B' := by
+  intro heq
+  rcases lt_trichotomy B.length B'.length with hlt | heqlen | hgt
+  · exact coeff_top_ne B' B hpos' hlt (congrArg (·.coeff B'.length) heq).symm
+  · apply hne
+    apply List.reverse_injective
+    apply List.ext_getElem (by rw [List.length_reverse, List.length_reverse, heqlen])
+    intro k hk hk'
+    have hkB : k < B.length := by rwa [List.length_reverse] at hk
+    have hkB' : k < B'.length := by rwa [List.length_reverse] at hk'
+    have hco : (msgPoly B).coeff (k + 1) = (msgPoly B').coeff (k + 1) := by rw [heq]
+    rw [msgPoly_coeff_succ B k hkB, msgPoly_coeff_succ B' k hkB'] at hco
+    have hmemB : B.reverse[k]'(by rwa [List.length_reverse]) ∈ B :=
+      List.mem_reverse.mp (List.getElem_mem _)
+    have hmemB' : B'.reverse[k]'(by rwa [List.length_reverse]) ∈ B' :=
+      List.mem_reverse.mp (List.getElem_mem _)
+    exact cast_inj_of_lt (hpos _ hmemB).2 (hpos' _ hmemB').2 hco
+  · exact coeff_top_ne B B' hpos hgt (congrArg (·.coeff B.length) heq)
+
+/-! ## The forgery bound (almost-universal hashing)
+
+    The crown jewel. Over the prime field `ZMod P`, two distinct messages (as
+    field-element, nonzero block lists) collide under Poly1305 for at most
+    `max |B| |B'|` choices of the key component `r`. This is the
+    information-theoretic guarantee behind Poly1305's unforgeability: a value `r`
+    causing a collision is a root of the nonzero difference polynomial, and a
+    degree-`n` polynomial over a field has at most `n` roots.
+
+    `ZMod P` is a field exactly when `P` is prime; `P = 2¹³⁰ − 5` is the Poly1305
+    prime. Its 40-digit primality is taken as the hypothesis `[Fact P.Prime]`
+    rather than discharged here (that needs a Pratt certificate). -/
+open Polynomial in
+theorem poly1305_almost_universal [Fact (Nat.Prime P)] (B B' : List Nat)
+    (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
+    (hne : B ≠ B') :
+    (Finset.univ.filter
+      (fun r : ZMod P => (msgPoly B).eval r = (msgPoly B').eval r)).card
+      ≤ max B.length B'.length := by
+  classical
+  haveI : NeZero P := ⟨P_pos.ne'⟩
+  set D : (ZMod P)[X] := msgPoly B - msgPoly B' with hD
+  have hDne : D ≠ 0 := sub_ne_zero.mpr (msgPoly_ne B B' hpos hpos' hne)
+  -- every colliding key is a root of the difference polynomial
+  have hsub : (Finset.univ.filter
+      (fun r : ZMod P => (msgPoly B).eval r = (msgPoly B').eval r))
+      ⊆ D.roots.toFinset := by
+    intro r hr
+    rw [Finset.mem_filter] at hr
+    rw [Multiset.mem_toFinset, Polynomial.mem_roots hDne]
+    show D.eval r = 0
+    rw [hD, Polynomial.eval_sub, hr.2, sub_self]
+  -- ... and a nonzero polynomial has at most `natDegree` roots
+  calc (Finset.univ.filter
+        (fun r : ZMod P => (msgPoly B).eval r = (msgPoly B').eval r)).card
+      ≤ D.roots.toFinset.card := Finset.card_le_card hsub
+    _ ≤ Multiset.card D.roots := Multiset.toFinset_card_le _
+    _ ≤ D.natDegree := Polynomial.card_roots' D
+    _ ≤ max (msgPoly B).natDegree (msgPoly B').natDegree := Polynomial.natDegree_sub_le _ _
+    _ ≤ max B.length B'.length := max_le_max (msgPoly_natDegree_le B) (msgPoly_natDegree_le B')
+
+/-! ## Lifting the bound to messages
+
+    `toBlocks` outputs exactly the field-element, nonzero blocks the bound needs,
+    so the hypotheses of `poly1305_almost_universal` are automatic for any
+    message. -/
+
+/-- Every block produced by `toBlocks` is a nonzero field element: full blocks
+    carry the `2¹²⁸` high bit, the final block the `2^(8·len)` bit. -/
+private theorem goPos (bs : List UInt8) : ∀ b ∈ toBlocks.go bs, 0 < b ∧ b < P := by
+  induction bs using toBlocks.go.induct with
+  | case1 => intro b hb; simp [toBlocks.go] at hb
+  | case2 bs hne _block _rest hlen ih =>
+    rw [go_cons bs hne, dif_pos hlen]
+    intro b hb
+    rcases List.mem_cons.mp hb with h | h
+    · subst h
+      have hge := blockToNat_ge (bs.take 16) hlen
+      exact ⟨by omega, blockToNat_lt_P _ hlen⟩
+    · exact ih b h
+  | case3 bs hne _block hlen =>
+    rw [go_cons bs hne, dif_neg hlen]
+    intro b hb
+    rw [List.mem_singleton] at hb
+    subst hb
+    refine ⟨?_, finalBlockToNat_lt_P _ (List.length_take_le 16 bs)⟩
+    unfold finalBlockToNat
+    have : 0 < 2 ^ ((bs.take 16).length * 8) := by positivity
+    omega
+
+/-- Every `toBlocks` block is a nonzero field element (`0 < b < P`). -/
+theorem toBlocks_pos (msg : List UInt8) : ∀ b ∈ toBlocks msg, 0 < b ∧ b < P := by
+  unfold toBlocks; exact goPos msg
+
+open Polynomial in
+/-- **Message-level forgery bound.** For two messages whose block expansions
+    differ, the Poly1305 polynomials collide for at most `max #blocks` keys
+    `r : ZMod P`. (Lifting the `toBlocks M ≠ toBlocks M'` hypothesis to
+    `M ≠ M'` is `toBlocks_inj`, the remaining gap.) -/
+theorem poly1305_almost_universal_msg [Fact (Nat.Prime P)] (M M' : List UInt8)
+    (hne : toBlocks M ≠ toBlocks M') :
+    (Finset.univ.filter (fun r : ZMod P =>
+      (msgPoly (toBlocks M)).eval r = (msgPoly (toBlocks M')).eval r)).card
+      ≤ max (toBlocks M).length (toBlocks M').length :=
+  poly1305_almost_universal (toBlocks M) (toBlocks M') (toBlocks_pos M) (toBlocks_pos M') hne
+
 end Poly1305.Spec

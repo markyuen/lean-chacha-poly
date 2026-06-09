@@ -65,18 +65,17 @@ private theorem foldl_add_eq_sum {α : Type*} (l : List α) (g : α → Nat) (in
   | nil => simp
   | cons a t ih => simp [ih]; ring
 
-theorem natToLe16_length (x : Nat) : (natToLe16 x).length = 16 := by
-  simp [natToLe16]
+theorem natToLe16_length (x : Nat) : (natToLe16 x).val.length = 16 := (natToLe16 x).property
 
 /-- The serialized tag round-trips: deserializing the 16 little-endian bytes of
     `x` recovers `x`, for any `x < 2¹²⁸`. So the Poly1305 tag is exactly
     `(accumulate + s) mod 2¹²⁸` (fully reduced), not a lossy truncation. -/
 theorem leToNat16_natToLe16 (x : Nat) (hx : x < 2 ^ 128) :
-    leToNat16 (natToLe16 x) (natToLe16_length x) = x := by
+    leToNat16 (natToLe16 x) = x := by
   unfold leToNat16
   rw [foldl_add_eq_sum, Nat.zero_add, ← Fin.sum_univ_def]
   have hcongr : ∀ i : Fin 16,
-      ((natToLe16 x).get (i.cast (natToLe16_length x).symm)).toNat * 2 ^ (i.val * 8)
+      ((natToLe16 x).val.get (i.cast (natToLe16 x).property.symm)).toNat * 2 ^ (i.val * 8)
         = x / 2 ^ (i.val * 8) % 256 * 2 ^ (i.val * 8) := by
     intro i
     rw [List.get_eq_getElem]
@@ -95,10 +94,10 @@ theorem leToNat16_natToLe16 (x : Nat) (hx : x < 2 ^ 128) :
     number gives exactly `(accumulate r blocks + s) mod 2¹²⁸` — the serialization
     loses nothing, so the tag is the true reduced value rather than a truncation. -/
 theorem poly1305_value (key : Key) (msg : List UInt8) :
-    leToNat16 (poly1305 key msg) (poly1305_length key msg) =
-      (accumulate (extractR key) (toBlocks msg) + extractS key) % 2 ^ 128 := by
-  have h : (accumulate (extractR key) (toBlocks msg) + extractS key) % 2 ^ 128 < 2 ^ 128 :=
-    Nat.mod_lt _ (by positivity)
+    leToNat16 (poly1305 key msg) =
+      (accumulate (extractR key) (blockNats (toBlocks msg)) + extractS key) % 2 ^ 128 := by
+  have h : (accumulate (extractR key) (blockNats (toBlocks msg)) + extractS key) % 2 ^ 128
+      < 2 ^ 128 := Nat.mod_lt _ (by positivity)
   unfold poly1305
   exact leToNat16_natToLe16 _ h
 

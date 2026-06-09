@@ -51,48 +51,48 @@ private theorem geom_lt (L : Nat) :
     omega
 
 /-- A full block, with its `2¹²⁸` high bit, still fits in the field: `< P`. -/
-theorem blockToNat_lt_P (block : List UInt8) (h : block.length = 16) :
-    blockToNat block h < P := by
-  have hlt := blockToNat_lt block h
+theorem blockToNat_lt_P (block : Block) :
+    blockToNat block < P := by
+  have hlt := blockToNat_lt block
   have hP : (2 : Nat) ^ 129 < P := by unfold P; norm_num
   omega
 
 /-- The final (partial) block fits in the field: `< P`. Its value is the
     little-endian sum of `L = block.length ≤ 16` bytes plus the high bit
     `2^(8L)`; the byte sum is `< 2^(8L)`, so the total is `< 2^(8L+1) ≤ 2¹²⁹ < P`. -/
-theorem finalBlockToNat_lt_P (block : List UInt8) (h : block.length ≤ 16) :
-    finalBlockToNat block h < P := by
+theorem finalBlockToNat_lt_P (block : FinalBlock) :
+    finalBlockToNat block < P := by
   -- The little-endian byte sum is `< 2^(8·len)`.
   have hbytes :
-      (List.finRange block.length).foldl
-        (fun acc i => acc + (block.get i).toNat * 2 ^ (i.val * 8)) 0
-        < 2 ^ (block.length * 8) := by
+      (List.finRange block.val.length).foldl
+        (fun acc i => acc + (block.val.get i).toNat * 2 ^ (i.val * 8)) 0
+        < 2 ^ (block.val.length * 8) := by
     rw [foldl_add_eq_sum, Nat.zero_add]
     -- bound each term by `255 · 2^(8i)`
     have hle :
-        ((List.finRange block.length).map
-          (fun i : Fin block.length => (block.get i).toNat * 2 ^ (i.val * 8))).sum
-        ≤ ((List.finRange block.length).map
-          (fun i : Fin block.length => 255 * 2 ^ (i.val * 8))).sum := by
+        ((List.finRange block.val.length).map
+          (fun i : Fin block.val.length => (block.val.get i).toNat * 2 ^ (i.val * 8))).sum
+        ≤ ((List.finRange block.val.length).map
+          (fun i : Fin block.val.length => 255 * 2 ^ (i.val * 8))).sum := by
       apply List.sum_le_sum
       intro i _
-      have hb : (block.get i).toNat ≤ 255 := by
-        have := (block.get i).toNat_lt; omega
+      have hb : (block.val.get i).toNat ≤ 255 := by
+        have := (block.val.get i).toNat_lt; omega
       exact Nat.mul_le_mul_right _ hb
     -- the constant sum is `∑_{i<len} 255·2^(8i) < 2^(8·len)`
     have hconst :
-        ((List.finRange block.length).map
-          (fun i : Fin block.length => 255 * 2 ^ (i.val * 8))).sum
-          = ∑ i ∈ Finset.range block.length, 255 * 2 ^ (i * 8) := by
+        ((List.finRange block.val.length).map
+          (fun i : Fin block.val.length => 255 * 2 ^ (i.val * 8))).sum
+          = ∑ i ∈ Finset.range block.val.length, 255 * 2 ^ (i * 8) := by
       rw [← Fin.sum_univ_def]
-      exact Fin.sum_univ_eq_sum_range (fun k => 255 * 2 ^ (k * 8)) block.length
-    have hgeom := geom_lt block.length
+      exact Fin.sum_univ_eq_sum_range (fun k => 255 * 2 ^ (k * 8)) block.val.length
+    have hgeom := geom_lt block.val.length
     rw [hconst] at hle
     omega
   -- assemble: total `< 2^(8·len) + 2^(8·len) ≤ 2^128 + 2^128 < P`
   unfold finalBlockToNat
-  have hpow : (2 : Nat) ^ (block.length * 8) ≤ 2 ^ 128 :=
-    Nat.pow_le_pow_right (by norm_num) (by omega)
+  have hpow : (2 : Nat) ^ (block.val.length * 8) ≤ 2 ^ 128 :=
+    Nat.pow_le_pow_right (by norm_num) (by have := block.property; omega)
   have hP : (2 : Nat) ^ 128 + 2 ^ 128 < P := by unfold P; norm_num
   omega
 
@@ -483,41 +483,45 @@ theorem poly1305_byte_forgery [Fact (Nat.Prime P)] (B B' : List Nat)
 
 /-- Every block produced by `toBlocks` is a nonzero field element: full blocks
     carry the `2¹²⁸` high bit, the final block the `2^(8·len)` bit. -/
-private theorem goPos (bs : List UInt8) : ∀ b ∈ toBlocks.go bs, 0 < b ∧ b < P := by
-  induction bs using toBlocks.go.induct with
-  | case1 => intro b hb; simp [toBlocks.go] at hb
+private theorem goPos (bs : List UInt8) : ∀ b ∈ toBlockNats.go bs, 0 < b ∧ b < P := by
+  induction bs using toBlockNats.go.induct with
+  | case1 => intro b hb; simp [toBlockNats.go] at hb
   | case2 bs hne _block _rest hlen ih =>
     rw [go_cons bs hne, dif_pos hlen]
     intro b hb
     rcases List.mem_cons.mp hb with h | h
     · subst h
-      have hge := blockToNat_ge (bs.take 16) hlen
-      exact ⟨by omega, blockToNat_lt_P _ hlen⟩
+      have hge := blockToNat_ge ⟨bs.take 16, hlen⟩
+      exact ⟨by omega, blockToNat_lt_P ⟨bs.take 16, hlen⟩⟩
     · exact ih b h
   | case3 bs hne _block hlen =>
     rw [go_cons bs hne, dif_neg hlen]
     intro b hb
     rw [List.mem_singleton] at hb
     subst hb
-    refine ⟨?_, finalBlockToNat_lt_P _ (List.length_take_le 16 bs)⟩
+    refine ⟨?_, finalBlockToNat_lt_P ⟨bs.take 16, List.length_take_le 16 bs⟩⟩
     unfold finalBlockToNat
-    have : 0 < 2 ^ ((bs.take 16).length * 8) := by positivity
+    have : 0 < 2 ^ ((⟨bs.take 16, List.length_take_le 16 bs⟩ : FinalBlock).val.length * 8) := by
+      positivity
     omega
 
-/-- Every `toBlocks` block is a nonzero field element (`0 < b < P`). -/
-theorem toBlocks_pos (msg : List UInt8) : ∀ b ∈ toBlocks msg, 0 < b ∧ b < P := by
-  unfold toBlocks; exact goPos msg
+/-- Every `toBlockNats` block is a nonzero field element (`0 < b < P`). -/
+theorem toBlockNats_pos (msg : List UInt8) : ∀ b ∈ toBlockNats msg, 0 < b ∧ b < P := by
+  unfold toBlockNats; exact goPos msg
 
 open Polynomial in
 /-- **Message-level forgery bound.** For two messages whose block expansions
     differ, the Poly1305 polynomials collide for at most `max #blocks` keys
-    `r : ZMod P`. (Lifting the `toBlocks M ≠ toBlocks M'` hypothesis to
-    `M ≠ M'` is `toBlocks_inj`, the remaining gap.) -/
+    `r : ZMod P`. (Lifting the `blockNats (toBlocks M) ≠ blockNats (toBlocks M')`
+    hypothesis to `M ≠ M'` is `toBlocks_inj`, in `BlockInj`.) -/
 theorem poly1305_almost_universal_msg [Fact (Nat.Prime P)] (M M' : List UInt8)
-    (hne : toBlocks M ≠ toBlocks M') :
+    (hne : blockNats (toBlocks M) ≠ blockNats (toBlocks M')) :
     (Finset.univ.filter (fun r : ZMod P =>
-      (msgPoly (toBlocks M)).eval r = (msgPoly (toBlocks M')).eval r)).card
-      ≤ max (toBlocks M).length (toBlocks M').length :=
-  poly1305_almost_universal (toBlocks M) (toBlocks M') (toBlocks_pos M) (toBlocks_pos M') hne
+      (msgPoly (blockNats (toBlocks M))).eval r
+        = (msgPoly (blockNats (toBlocks M'))).eval r)).card
+      ≤ max (blockNats (toBlocks M)).length (blockNats (toBlocks M')).length := by
+  rw [blockNats_toBlocks, blockNats_toBlocks] at hne ⊢
+  exact poly1305_almost_universal (toBlockNats M) (toBlockNats M')
+    (toBlockNats_pos M) (toBlockNats_pos M') hne
 
 end Poly1305.Spec

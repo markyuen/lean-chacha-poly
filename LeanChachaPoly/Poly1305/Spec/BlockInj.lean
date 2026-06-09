@@ -89,8 +89,10 @@ private theorem finSum_eq_rangeSum (a : List UInt8) :
 
 /-- `finalBlockToNat` as recursive value plus the length-encoding high bit. -/
 theorem finalBlockToNat_eq (a : List UInt8) (h : a.length ≤ 16) :
-    finalBlockToNat a h = leVal a + 2 ^ (a.length * 8) := by
-  unfold finalBlockToNat
+    finalBlockToNat ⟨a, h⟩ = leVal a + 2 ^ (a.length * 8) := by
+  show (List.finRange a.length).foldl
+      (fun acc i => acc + (a.get i).toNat * 2 ^ (i.val * 8)) 0 + 2 ^ (a.length * 8)
+    = leVal a + 2 ^ (a.length * 8)
   congr 1
   rw [foldl_add_eq_sum, Nat.zero_add, ← Fin.sum_univ_def]
   rw [Finset.sum_congr rfl (fun i _ => by
@@ -105,7 +107,7 @@ theorem finalBlockToNat_eq (a : List UInt8) (h : a.length ≤ 16) :
     The `2^(8·len)` high bit puts the value in `[2^(8·len), 2^(8·len+1))`, so
     the length is determined, and within a length the content sum is injective. -/
 theorem finalBlockToNat_inj (a b : List UInt8) (ha : a.length ≤ 16) (hb : b.length ≤ 16)
-    (h : finalBlockToNat a ha = finalBlockToNat b hb) : a = b := by
+    (h : finalBlockToNat ⟨a, ha⟩ = finalBlockToNat ⟨b, hb⟩) : a = b := by
   rw [finalBlockToNat_eq, finalBlockToNat_eq] at h
   have hla : leVal a < 2 ^ (a.length * 8) := by
     have := leVal_lt a; rwa [show (256 : Nat) ^ a.length = 2 ^ (a.length * 8) from by
@@ -133,15 +135,16 @@ theorem finalBlockToNat_inj (a b : List UInt8) (ha : a.length ≤ 16) (hb : b.le
     **or** length get distinct encodings. -/
 theorem finalBlock_encoding_distinct (a b : List UInt8) (ha : a.length ≤ 16)
     (hb : b.length ≤ 16) (hne : a ≠ b) :
-    finalBlockToNat a ha ≠ finalBlockToNat b hb :=
+    finalBlockToNat ⟨a, ha⟩ ≠ finalBlockToNat ⟨b, hb⟩ :=
   fun h => hne (finalBlockToNat_inj a b ha hb h)
 
 /-! ## Full-block injectivity and range separation -/
 
 /-- `leToNat16` is the recursive little-endian value. -/
 private theorem leToNat16_eq_leVal (bs : List UInt8) (h : bs.length = 16) :
-    leToNat16 bs h = leVal bs := by
-  unfold leToNat16
+    leToNat16 ⟨bs, h⟩ = leVal bs := by
+  show (List.finRange 16).foldl
+      (fun acc i => acc + (bs.get (i.cast h.symm)).toNat * 2 ^ (i.val * 8)) 0 = leVal bs
   rw [foldl_add_eq_sum, Nat.zero_add, ← Fin.sum_univ_def]
   have hterm : ∀ i ∈ (Finset.univ : Finset (Fin 16)),
       (bs.get (i.cast h.symm)).toNat * 2 ^ (i.val * 8)
@@ -160,7 +163,7 @@ private theorem leToNat16_eq_leVal (bs : List UInt8) (h : bs.length = 16) :
 /-- Full 16-byte blocks inject (the `2¹²⁸` high bit is constant, so the content
     determines the bytes). -/
 theorem blockToNat_inj (a b : List UInt8) (ha : a.length = 16) (hb : b.length = 16)
-    (h : blockToNat a ha = blockToNat b hb) : a = b := by
+    (h : blockToNat ⟨a, ha⟩ = blockToNat ⟨b, hb⟩) : a = b := by
   unfold blockToNat at h
   rw [leToNat16_eq_leVal a ha, leToNat16_eq_leVal b hb] at h
   exact leVal_inj a b (ha.trans hb.symm) (by omega)
@@ -168,7 +171,7 @@ theorem blockToNat_inj (a b : List UInt8) (ha : a.length = 16) (hb : b.length = 
 /-- A short final block stays below `2¹²⁸` — disjoint from full blocks
     (`≥ 2¹²⁸`), so the two kinds never collide. -/
 private theorem finalBlock_lt (y : List UInt8) (hy : y.length ≤ 16) (hy' : y.length ≠ 16) :
-    finalBlockToNat y hy < 2 ^ 128 := by
+    finalBlockToNat ⟨y, hy⟩ < 2 ^ 128 := by
   rw [finalBlockToNat_eq]
   have hlt : leVal y < 2 ^ (y.length * 8) := by
     have := leVal_lt y; rwa [show (256 : Nat) ^ y.length = 2 ^ (y.length * 8) from by
@@ -182,11 +185,11 @@ private theorem finalBlock_lt (y : List UInt8) (hy : y.length ≤ 16) (hy' : y.l
 /-! ## `toBlocks` injectivity -/
 
 private theorem goInj (M : List UInt8) :
-    ∀ (M' : List UInt8), toBlocks.go M = toBlocks.go M' → M = M' := by
-  induction M using toBlocks.go.induct with
+    ∀ (M' : List UInt8), toBlockNats.go M = toBlockNats.go M' → M = M' := by
+  induction M using toBlockNats.go.induct with
   | case1 =>
     intro M' h
-    rw [show toBlocks.go [] = [] from by simp [toBlocks.go]] at h
+    rw [show toBlockNats.go [] = [] from by simp [toBlockNats.go]] at h
     by_contra hne
     rw [go_cons M' (fun e => hne e.symm)] at h
     split at h <;> simp at h
@@ -194,7 +197,7 @@ private theorem goInj (M : List UInt8) :
     intro M' h
     rw [go_cons bs hne, dif_pos hlen] at h
     rcases eq_or_ne M' [] with rfl | hM'
-    · simp [toBlocks.go] at h
+    · simp [toBlockNats.go] at h
     · rw [go_cons M' hM'] at h
       split at h
       · rename_i hlen'
@@ -207,7 +210,7 @@ private theorem goInj (M : List UInt8) :
           _ = M' := List.take_append_drop 16 M'
       · rename_i hlen'
         rw [List.cons.injEq] at h
-        have hge := blockToNat_ge (bs.take 16) hlen
+        have hge := blockToNat_ge ⟨bs.take 16, hlen⟩
         have hlt := finalBlock_lt (M'.take 16) (List.length_take_le 16 M')
           (by rw [List.length_take] at hlen' ⊢; omega)
         omega
@@ -217,12 +220,12 @@ private theorem goInj (M : List UInt8) :
     have hbs : bs.length < 16 := by
       rw [List.length_take] at hlen; omega
     rcases eq_or_ne M' [] with rfl | hM'
-    · simp [toBlocks.go] at h
+    · simp [toBlockNats.go] at h
     · rw [go_cons M' hM'] at h
       split at h
       · rename_i hlen'
         rw [List.cons.injEq] at h
-        have hge := blockToNat_ge (M'.take 16) hlen'
+        have hge := blockToNat_ge ⟨M'.take 16, hlen'⟩
         have hlt := finalBlock_lt (bs.take 16) (List.length_take_le 16 bs)
           (by rw [List.length_take]; omega)
         omega
@@ -237,12 +240,17 @@ private theorem goInj (M : List UInt8) :
         rw [e1, e2] at hfin
         exact hfin
 
-/-- **`toBlocks` is injective**: distinct messages expand to distinct block
-    lists. The high-bit padding makes block boundaries and the final length
-    unambiguous, so the polynomial-hash collision bound lifts from block lists to
+/-- The numeric block engine is injective: distinct messages expand to distinct
+    block-`Nat` lists. The high-bit padding makes block boundaries and the final
+    length unambiguous. -/
+theorem toBlockNats_inj (M M' : List UInt8) (h : toBlockNats M = toBlockNats M') : M = M' :=
+  goInj M M' h
+
+/-- **`toBlocks` is injective**: distinct messages expand to distinct typed block
+    structures, so the polynomial-hash collision bound lifts from block lists to
     messages. -/
 theorem toBlocks_inj (M M' : List UInt8) (h : toBlocks M = toBlocks M') : M = M' :=
-  goInj M M' h
+  toBlockNats_inj M M' (by rw [← blockNats_toBlocks, ← blockNats_toBlocks]; exact congrArg blockNats h)
 
 open Polynomial in
 /-- **Message-level forgery bound (distinct messages).** With `toBlocks_inj`
@@ -251,8 +259,10 @@ open Polynomial in
 theorem poly1305_almost_universal_msg' [Fact (Nat.Prime P)] (M M' : List UInt8)
     (hne : M ≠ M') :
     (Finset.univ.filter (fun r : ZMod P =>
-      (msgPoly (toBlocks M)).eval r = (msgPoly (toBlocks M')).eval r)).card
-      ≤ max (toBlocks M).length (toBlocks M').length :=
-  poly1305_almost_universal_msg M M' (fun h => hne (toBlocks_inj M M' h))
+      (msgPoly (blockNats (toBlocks M))).eval r
+        = (msgPoly (blockNats (toBlocks M'))).eval r)).card
+      ≤ max (blockNats (toBlocks M)).length (blockNats (toBlocks M')).length :=
+  poly1305_almost_universal_msg M M' (fun h => hne (toBlockNats_inj M M'
+    (by rw [← blockNats_toBlocks, ← blockNats_toBlocks]; exact h)))
 
 end Poly1305.Spec

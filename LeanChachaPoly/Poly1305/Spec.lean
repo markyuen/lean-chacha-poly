@@ -1,4 +1,5 @@
 import LeanChachaPoly.ChaCha20.Spec
+import LeanChachaPoly.Subtypes
 
 /-!
 # Poly1305 MAC — Specification
@@ -21,6 +22,14 @@ polynomial evaluation in GF(2¹³⁰ - 5).
   Poly1305.Spec.Blocking   ← message-blocking properties
   Poly1305.Spec.Accumulate ← accumulation = polynomial evaluation
   Poly1305.Native          ← ByteArray bridge
+
+## Typing convention
+
+Length invariants are carried in the types via the `{ x // p x }` subtypes from
+`LeanChachaPoly.Subtypes`: a `Key` is `Bytes 32`, a full `Block` is `Bytes 16`, a
+partial `FinalBlock` is `{ l // l.length ≤ 16 }`, and `leToNat16`/`blockToNat`/
+`finalBlockToNat`/`natToLe16`/`poly1305` take and return these — no length proofs are
+threaded as separate parameters.
 -/
 namespace Poly1305.Spec
 
@@ -35,19 +44,17 @@ theorem P_pos : 0 < P := by decide
 
 /-- A 256-bit Poly1305 key: first 16 bytes are `r` (clamped),
     last 16 bytes are `s`. -/
-structure Key where
-  bytes : List UInt8
-  size  : bytes.length = 32
+abbrev Key := Bytes 32
 
 /-- Build a `Key` from a byte list, returning `none` unless it is exactly
     32 bytes. -/
 def Key.ofBytes? (bs : List UInt8) : Option Key :=
-  if h : bs.length = 32 then some { bytes := bs, size := h } else none
+  if h : bs.length = 32 then some ⟨bs, h⟩ else none
 
 /-- Deserialize 16 bytes as a little-endian `Nat`. -/
-def leToNat16 (bs : List UInt8) (h : bs.length = 16) : Nat :=
+def leToNat16 (bs : Bytes 16) : Nat :=
   (List.finRange 16).foldl (fun acc i =>
-    acc + (bs.get (i.cast h.symm)).toNat * 2^(i.val * 8)) 0
+    acc + (bs.val.get (i.cast bs.property.symm)).toNat * 2^(i.val * 8)) 0
 
 /-- Clamp `r`: clear specific bits per RFC 8439 §2.5.1.
     Clamping ensures certain bits of r are zero, which prevents
@@ -57,28 +64,64 @@ def clamp (r : Nat) : Nat :=
 
 /-- Extract and clamp `r` from the key. -/
 def extractR (key : Key) : Nat :=
-  clamp (leToNat16 (key.bytes.take 16) (by simp [key.size]))
+  clamp (leToNat16 ⟨key.val.take 16, by simp [key.property]⟩)
 
 /-- Extract `s` from the key. -/
 def extractS (key : Key) : Nat :=
-  leToNat16 (key.bytes.drop 16)
-    (by simp [List.length_drop, key.size])
+  leToNat16 ⟨key.val.drop 16, by simp [List.length_drop, key.property]⟩
 
 /-! ## Message blocking (RFC 8439 §2.5.1) -/
 
+/-- A complete 16-byte block. -/
+abbrev Block := Bytes 16
+
+/-- A final, possibly-partial block: at most 16 bytes. -/
+abbrev FinalBlock := { l : List UInt8 // l.length ≤ 16 }
+
 /-- Convert a complete 16-byte block to a Nat with a high bit set. -/
-def blockToNat (block : List UInt8) (h : block.length = 16) : Nat :=
-  leToNat16 block h + 2^128
+def blockToNat (block : Block) : Nat :=
+  leToNat16 block + 2^128
 
 /-- The last (possibly partial) block: also gets a high bit but
     at position `block.length * 8`, not 128. -/
-def finalBlockToNat (block : List UInt8) (_ : block.length ≤ 16) : Nat :=
-  (List.finRange block.length).foldl (fun acc i =>
-    acc + (block.get i).toNat * 2^(i.val * 8)) 0
-  + 2^(block.length * 8)
+def finalBlockToNat (block : FinalBlock) : Nat :=
+  (List.finRange block.val.length).foldl (fun acc i =>
+    acc + (block.val.get i).toNat * 2^(i.val * 8)) 0
+  + 2^(block.val.length * 8)
 
-/-- Split a message into 16-byte blocks, converted to Nat values. -/
-def toBlocks (msg : List UInt8) : List Nat :=
+/-- Split a message into typed 16-byte blocks plus an optional final partial
+    block. The block structure is explicit in the return type. -/
+def toBlocks (msg : List UInt8) : List Block × Option FinalBlock :=
+  go msg
+where
+  go : List UInt8 → List Block × Option FinalBlock
+    | [] => ([], none)
+    | bs =>
+      let block := bs.take 16
+      let rest  := bs.drop 16
+      if h : block.length = 16 then
+        let p := go rest
+        (⟨block, h⟩ :: p.1, p.2)
+      else
+        ([], some ⟨block, List.length_take_le 16 bs⟩)
+  termination_by bs => bs.length
+  decreasing_by
+    simp only [List.length_drop]
+    have hlen : bs.length ≥ 16 := by
+      have htake := @List.length_take UInt8 16 bs
+      simp only [block] at h
+      omega
+    omega
+
+/-- The Nat values fed into the polynomial hash: full blocks (with the `2¹²⁸`
+    high bit) followed by the optional final block. -/
+def blockNats (p : List Block × Option FinalBlock) : List Nat :=
+  p.1.map blockToNat ++ (p.2.map finalBlockToNat).toList
+
+/-- Direct recursive form of `blockNats ∘ toBlocks`, kept as the engine the
+    blocking/injectivity proofs induct over (`toBlockNats.go.induct`); proven
+    equal to `blockNats (toBlocks ·)` by `blockNats_toBlocks`. -/
+def toBlockNats (msg : List UInt8) : List Nat :=
   go msg
 where
   go : List UInt8 → List Nat
@@ -87,13 +130,9 @@ where
       let block := bs.take 16
       let rest  := bs.drop 16
       if h : block.length = 16 then
-        blockToNat block h :: go rest
+        blockToNat ⟨block, h⟩ :: go rest
       else
-        [finalBlockToNat block (by
-          have : block.length ≤ 16 := by
-            simp only [block, List.length_take]
-            exact Nat.min_le_left _ _
-          omega)]
+        [finalBlockToNat ⟨block, List.length_take_le 16 bs⟩]
   termination_by bs => bs.length
   decreasing_by
     simp only [List.length_drop]
@@ -116,18 +155,17 @@ def accumulate (r : Nat) (blocks : List Nat) : Nat :=
 /-! ## Serialization -/
 
 /-- Pack a 128-bit (16-byte) Nat as little-endian bytes. -/
-def natToLe16 (n : Nat) : List UInt8 :=
-  (List.range 16).map fun i => UInt8.ofNat ((n >>> (i * 8)) % 256)
+def natToLe16 (n : Nat) : Bytes 16 :=
+  ⟨(List.range 16).map fun i => UInt8.ofNat ((n >>> (i * 8)) % 256), by simp⟩
 
 /-! ## Full MAC -/
 
 /-- Compute the Poly1305 tag.
     Result: `(accumulate(r, blocks) + s) mod 2¹²⁸` as 16 bytes. -/
-def poly1305 (key : Key) (msg : List UInt8) : List UInt8 :=
+def poly1305 (key : Key) (msg : List UInt8) : Bytes 16 :=
   let r      := extractR key
   let s      := extractS key
-  let blocks := toBlocks msg
-  let acc    := accumulate r blocks
+  let acc    := accumulate r (blockNats (toBlocks msg))
   natToLe16 ((acc + s) % 2^128)
 
 
@@ -135,10 +173,9 @@ def poly1305 (key : Key) (msg : List UInt8) : List UInt8 :=
     CAPSTONE THEOREMS
     ================================================================ -/
 
-/-! ### P1: Tag length -/
+/-! ### P1: Tag length — now enforced by the `Bytes 16` return type. -/
 theorem poly1305_length (key : Key) (msg : List UInt8) :
-    (poly1305 key msg).length = 16 := by
-  simp [poly1305, natToLe16, List.length_map]
+    (poly1305 key msg).val.length = 16 := (poly1305 key msg).property
 
 /-! ### P2: accumulate stays in field -/
 theorem step_lt_P (r acc block : Nat) : step r acc block < P := by
@@ -167,8 +204,8 @@ theorem accumulate_append (r : Nat) (xs ys : List Nat) :
 theorem poly1305_empty (key : Key) :
     poly1305 key [] =
       natToLe16 (extractS key % 2^128) := by
-  have h : toBlocks [] = [] := by simp [toBlocks, toBlocks.go]
-  simp [poly1305, h, accumulate]
+  have h : toBlocks [] = ([], none) := by simp [toBlocks, toBlocks.go]
+  simp [poly1305, h, blockNats, accumulate]
 
 /-! ### P5: Clamped r is bounded -/
 theorem clamp_lt (r : Nat) : clamp r < 2^128 := by

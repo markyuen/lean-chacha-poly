@@ -1,4 +1,7 @@
 import LeanChachaPoly.Aead.Spec
+import LeanChachaPoly.Aead.Spec.KeyDerivation
+import LeanChachaPoly.Aead.Spec.MacData
+import Mathlib
 
 /-!
 # AEAD Authenticity — structural properties
@@ -7,6 +10,10 @@ import LeanChachaPoly.Aead.Spec
 plaintext only when the received tag matches the tag recomputed over
 `(aad, ciphertext)`. There is no control-flow path that releases plaintext on
 an authentication failure — the only `some` is guarded by the tag check.
+
+`le64_inj` / `macData_aad_binding`: the RFC 8439 §2.8 length fields make the MAC
+input injective in the associated data, so changing the AAD changes the MAC
+input (the deterministic core of "reject on AAD mismatch").
 -/
 
 namespace Aead.Spec
@@ -29,5 +36,52 @@ theorem decrypt_verifies (key : Key) (nonce : Nonce) (ctAndTag aad pt : List UIn
     · rename_i htag
       exact eq_of_beq htag
     · simp at h
+
+/-! ## Length-field injectivity -/
+
+/-- `UInt8.ofNat` is injective on byte values. -/
+private theorem ofNat_inj_lt {a b : Nat} (ha : a < 256) (hb : b < 256)
+    (h : UInt8.ofNat a = UInt8.ofNat b) : a = b := by
+  have := congrArg UInt8.toNat h
+  simp only [UInt8.toNat_ofNat'] at this
+  rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)] at this
+  exact this
+
+/-- The 8-byte little-endian length encoding is injective on 64-bit values. -/
+theorem le64_inj (n m : Nat) (hn : n < 2 ^ 64) (hm : m < 2 ^ 64)
+    (h : le64 n = le64 m) : n = m := by
+  have key : ∀ i, i < 8 → n / 2 ^ (i * 8) % 256 = m / 2 ^ (i * 8) % 256 := by
+    intro i hi
+    have hopt : (le64 n)[i]? = (le64 m)[i]? := by rw [h]
+    simp only [le64, List.getElem?_map, List.getElem?_range, hi,
+      Option.map_some, Option.some.injEq, Nat.shiftRight_eq_div_pow] at hopt
+    exact ofNat_inj_lt (Nat.mod_lt _ (by norm_num)) (Nat.mod_lt _ (by norm_num)) hopt
+  have k0 := key 0 (by norm_num); have k1 := key 1 (by norm_num)
+  have k2 := key 2 (by norm_num); have k3 := key 3 (by norm_num)
+  have k4 := key 4 (by norm_num); have k5 := key 5 (by norm_num)
+  have k6 := key 6 (by norm_num); have k7 := key 7 (by norm_num)
+  norm_num at k0 k1 k2 k3 k4 k5 k6 k7
+  omega
+
+/-- The MAC input determines the associated data (for a fixed ciphertext): the
+    padding plus the `le64` length field recover `aad` exactly. -/
+theorem macData_aad_eq (aad₁ aad₂ ct : List UInt8)
+    (h1 : aad₁.length < 2 ^ 64) (h2 : aad₂.length < 2 ^ 64)
+    (h : macData aad₁ ct = macData aad₂ ct) : aad₁ = aad₂ := by
+  have hpad : padTo16 aad₁ = padTo16 aad₂ := macData_aad_inj aad₁ aad₂ ct h
+  have hlen : aad₁.length = aad₂.length := by
+    have h' := h
+    rw [macData, macData, hpad] at h'
+    exact le64_inj _ _ h1 h2 (List.append_cancel_left (List.append_cancel_right h'))
+  calc aad₁ = (padTo16 aad₁).take aad₁.length := (padTo16_prefix aad₁).symm
+    _ = (padTo16 aad₂).take aad₂.length := by rw [hpad, hlen]
+    _ = aad₂ := padTo16_prefix aad₂
+
+/-- **AAD binding.** Changing the associated data changes the Poly1305 MAC input
+    — the deterministic core of "decrypt rejects on AAD mismatch". -/
+theorem macData_aad_binding (aad₁ aad₂ ct : List UInt8)
+    (h1 : aad₁.length < 2 ^ 64) (h2 : aad₂.length < 2 ^ 64) (hne : aad₁ ≠ aad₂) :
+    macData aad₁ ct ≠ macData aad₂ ct :=
+  fun h => hne (macData_aad_eq aad₁ aad₂ ct h1 h2 h)
 
 end Aead.Spec

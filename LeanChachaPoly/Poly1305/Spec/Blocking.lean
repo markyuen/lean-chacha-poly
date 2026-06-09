@@ -85,5 +85,4 @@ theorem blockNats_toBlocks (msg : List UInt8) :
     rw [go_cons bs hne, dif_neg hlen, toBlocks_go_cons bs hne, dif_neg hlen]
     simp [blockNats]
 
-
 end Poly1305.Spec

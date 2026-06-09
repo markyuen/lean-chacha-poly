@@ -246,7 +246,6 @@ theorem toBlockNats_inj (M M' : List UInt8) (h : toBlockNats M = toBlockNats M')
 theorem toBlocks_inj (M M' : List UInt8) (h : toBlocks M = toBlocks M') : M = M' :=
   toBlockNats_inj M M' (by rw [← blockNats_toBlocks, ← blockNats_toBlocks]; exact congrArg blockNats h)
 
-open Polynomial in
 /-- **Capstone.** Message-level forgery bound (distinct messages). With `toBlocks_inj`
     closing the lift, the almost-universal bound holds for any two distinct
     messages `M ≠ M'`, not just distinct block expansions. -/

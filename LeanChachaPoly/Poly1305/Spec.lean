@@ -173,7 +173,6 @@ def poly1305 (key : Key) (msg : List UInt8) : Bytes 16 :=
   let acc    := accumulate r (blockNats (toBlocks msg))
   natToLe16 ((acc + s) % 2^128)
 
-
 /-! ================================================================
     BASIC PROPERTIES
 

@@ -102,7 +102,6 @@ def decrypt (key : Key) (nonce : Nonce)
       some (chacha20 key nonce 1 ciphertext)
     else none
 
-
 /-!
 This file is construction only. The properties live elsewhere:
 - functional roundtrip / length facts — `Aead.Capstones` (`decrypt_encrypt`, …)

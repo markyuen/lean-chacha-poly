@@ -29,6 +29,7 @@ field-dependent results are parameterized on `[Fact (Nat.Prime P)]`.
 namespace Poly1305.Spec
 
 open scoped BigOperators
+open Polynomial
 
 /-! ## Blocks are field elements (`< P`) -/
 
@@ -95,13 +96,11 @@ theorem finalBlockToNat_lt_P (block : FinalBlock) :
     This recasts the iterative MAC as a single polynomial evaluation in the
     field, which is what the root-counting forgery bound needs. -/
 
-open Polynomial in
 /-- The message polynomial: block `cⱼ` (counted from the end, position `k`) is
     the coefficient of `X^(k+1)`. Matches `evalPoly`'s index convention. -/
 noncomputable def msgPoly (B : List Nat) : (ZMod P)[X] :=
   (B.reverse.zipIdx.map (fun p => C (p.1 : ZMod P) * X ^ (p.2 + 1))).sum
 
-open Polynomial in
 /-- **Supporting.** Evaluating `msgPoly` distributes over the block list. -/
 theorem msgPoly_eval (B : List Nat) (r : Nat) :
     (msgPoly B).eval (r : ZMod P)
@@ -154,14 +153,12 @@ private theorem zipIdx_aux {M : Type*} [AddCommMonoid M] (L : List Nat)
       rw [show k + (s + 1) = k + 1 + s from by ring]
     · rw [Nat.zero_add]
 
-open Polynomial in
 /-- **Supporting.** `msgPoly` as a `Finset.range` sum (the `zipIdx` reindexed). -/
 theorem msgPoly_eq_sum (B : List Nat) :
     msgPoly B = ∑ k ∈ Finset.range B.length, C (B.reverse.getD k 0 : ZMod P) * X ^ (k + 1) := by
   unfold msgPoly
   rw [zipIdx_aux B.reverse (fun a k => C (a : ZMod P) * X ^ (k + 1)) 0, List.length_reverse]
 
-open Polynomial in
 /-- The coefficient of `msgPoly B` at degree `d`: block `B.reverse[d−1]` when
     `1 ≤ d ≤ |B|`, else `0`. -/
 theorem msgPoly_coeff (B : List Nat) (d : Nat) :
@@ -187,13 +184,11 @@ theorem msgPoly_coeff (B : List Nat) (d : Nat) :
     simp only [Finset.mem_range]
     rw [if_congr (show (d - 1 < B.length) ↔ (1 ≤ d ∧ d ≤ B.length) by omega) rfl rfl]
 
-open Polynomial in
 /-- Coefficient at a degree `> |B|` is zero. -/
 theorem msgPoly_coeff_high (B : List Nat) (d : Nat) (hd : B.length < d) :
     (msgPoly B).coeff d = 0 := by
   rw [msgPoly_coeff, if_neg (by omega)]
 
-open Polynomial in
 /-- Coefficient at degree `k+1` (for `k < |B|`) is the reverse-indexed block. -/
 theorem msgPoly_coeff_succ (B : List Nat) (k : Nat) (hk : k < B.length) :
     (msgPoly B).coeff (k + 1)
@@ -274,7 +269,6 @@ theorem msgPoly_ne (B B' : List Nat)
     prime. Its 40-digit primality is taken as the hypothesis `[Fact P.Prime]`
     rather than discharged here (that needs a Pratt certificate). -/
 
-open Polynomial in
 /-- **Capstone.** Almost-universal hashing: over the prime field `ZMod P`, two
     distinct messages (as field-element, nonzero block lists) collide under Poly1305
     for at most `max |B| |B'|` choices of the key component `r`. The
@@ -311,7 +305,6 @@ theorem poly1305_almost_universal [Fact (Nat.Prime P)] (B B' : List Nat)
 
 /-! ## Almost-Δ-universal (additive offset) -/
 
-open Polynomial in
 /-- **Key lemma.** The byte-level forgery bound rests on a *Δ-universal* property:
     the forger must make `acc(M') − acc(M)` hit a specific value `c`, not just collide.
     Over the field this is the same root count applied to `D = msgPoly B − msgPoly B'
@@ -359,7 +352,6 @@ theorem poly1305_almost_delta_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     _ ≤ max (msgPoly B).natDegree (msgPoly B').natDegree := by rw [hE]; exact Polynomial.natDegree_sub_le _ _
     _ ≤ max B.length B'.length := max_le_max (msgPoly_natDegree_le B) (msgPoly_natDegree_le B')
 
-open Polynomial in
 /-- **Supporting.** Union-bound reduction toward the byte-level forgery bound: if the
     keys causing a byte-level collision are covered by a finite set `cands` of
     field-offsets `c` (each collision realizing `eval B = eval B' + c`), then the
@@ -424,7 +416,6 @@ theorem accumulate_eq_eval_val (r : Nat) (B : List Nat) :
 
 /-! ## The byte-level forgery bound -/
 
-open Polynomial in
 /-- **Capstone.** The real byte-level Poly1305 forgery bound — the `8⌈L/16⌉` factor.
     The accumulator for `B` at key `r` is the canonical representative
     `((msgPoly B).eval r).val ∈ [0, P)`; the real tag difference is
@@ -498,7 +489,6 @@ private theorem goPos (bs : List UInt8) : ∀ b ∈ toBlockNats.go bs, 0 < b ∧
 theorem toBlockNats_pos (msg : List UInt8) : ∀ b ∈ toBlockNats msg, 0 < b ∧ b < P := by
   unfold toBlockNats; exact goPos msg
 
-open Polynomial in
 /-- **Capstone.** Message-level forgery bound: for two messages whose block
     expansions differ, the Poly1305 polynomials collide for at most `max #blocks` keys
     `r : ZMod P`. (Lifting the `blockNats (toBlocks M) ≠ blockNats (toBlocks M')`

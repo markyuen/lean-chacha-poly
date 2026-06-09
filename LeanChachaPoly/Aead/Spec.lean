@@ -49,28 +49,33 @@ abbrev Nonce := ChaCha20.Spec.Nonce
     `keystream_length`. -/
 def derivePolyKey (key : Key) (nonce : Nonce) : Poly1305.Spec.Key :=
   let stream := keystream key nonce 0 64
-  { bytes := stream.take 32,
-    size  := by
-      rw [List.length_take, keystream_length]
-      decide }
+  ⟨stream.take 32, by rw [List.length_take, keystream_length]; decide⟩
 
 /-! ## MAC data construction (RFC 8439 §2.8) -/
 
-/-- Pad a byte list to a multiple of 16 with zeros. -/
-def padTo16 (data : List UInt8) : List UInt8 :=
-  let rem := data.length % 16
-  if rem = 0 then data
-  else data ++ List.replicate (16 - rem) 0
+/-- Pad a byte list to a multiple of 16 with zeros. The 16-alignment is enforced
+    by the `Padded` return type. -/
+def padTo16 (data : List UInt8) : Padded :=
+  if h : data.length % 16 = 0 then ⟨data, h⟩
+  else ⟨data ++ List.replicate (16 - data.length % 16) 0, by
+    rw [List.length_append, List.length_replicate]; omega⟩
 
 /-- Encode a Nat as 8 bytes, little-endian. -/
-def le64 (n : Nat) : List UInt8 :=
-  (List.range 8).map fun i => UInt8.ofNat ((n >>> (i * 8)) % 256)
+def le64 (n : Nat) : Bytes 8 :=
+  ⟨(List.range 8).map fun i => UInt8.ofNat ((n >>> (i * 8)) % 256), by simp⟩
 
 /-- Construct the Poly1305 authentication input per RFC 8439 §2.8.
-    Layout: pad(aad) ‖ pad(ciphertext) ‖ len(aad) as 8-LE ‖ len(ct) as 8-LE -/
-def macData (aad ciphertext : List UInt8) : List UInt8 :=
-  padTo16 aad ++ padTo16 ciphertext ++
-  le64 aad.length ++ le64 ciphertext.length
+    Layout: pad(aad) ‖ pad(ciphertext) ‖ len(aad) as 8-LE ‖ len(ct) as 8-LE.
+    The total length is a multiple of 16 (`Padded`). -/
+def macData (aad ciphertext : List UInt8) : Padded :=
+  ⟨(padTo16 aad).val ++ (padTo16 ciphertext).val ++
+   (le64 aad.length).val ++ (le64 ciphertext.length).val, by
+    have h1 := (padTo16 aad).property
+    have h2 := (padTo16 ciphertext).property
+    have h3 := (le64 aad.length).property
+    have h4 := (le64 ciphertext.length).property
+    simp only [List.length_append]
+    omega⟩
 
 /-! ## Encrypt and decrypt -/
 
@@ -79,8 +84,8 @@ def encrypt (key : Key) (nonce : Nonce)
     (plaintext aad : List UInt8) : List UInt8 :=
   let polyKey    := derivePolyKey key nonce
   let ciphertext := chacha20 key nonce 1 plaintext
-  let tag        := poly1305 polyKey (macData aad ciphertext)
-  ciphertext ++ tag
+  let tag        := poly1305 polyKey (macData aad ciphertext).val
+  ciphertext ++ tag.val
 
 /-- AEAD decryption: returns `some plaintext` on success,
     `none` if the tag does not match. -/
@@ -92,8 +97,8 @@ def decrypt (key : Key) (nonce : Nonce)
     let ciphertext := ciphertextAndTag.take ctLen
     let recvTag    := ciphertextAndTag.drop ctLen
     let polyKey    := derivePolyKey key nonce
-    let expTag     := poly1305 polyKey (macData aad ciphertext)
-    if recvTag == expTag then
+    let expTag     := poly1305 polyKey (macData aad ciphertext).val
+    if recvTag == expTag.val then
       some (chacha20 key nonce 1 ciphertext)
     else none
 
@@ -128,7 +133,7 @@ theorem decrypt_encrypt (key : Key) (nonce : Nonce)
     decrypt key nonce (encrypt key nonce plaintext aad) aad
     = some plaintext := by
   have htag : (poly1305 (derivePolyKey key nonce)
-      (macData aad (chacha20 key nonce 1 plaintext))).length = 16 :=
+      (macData aad (chacha20 key nonce 1 plaintext)).val).val.length = 16 :=
     poly1305_length _ _
   unfold encrypt decrypt
   -- The ciphertext+tag is at least 16 bytes, so the length guard fails.

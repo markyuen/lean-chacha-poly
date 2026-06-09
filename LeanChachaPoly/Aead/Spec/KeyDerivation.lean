@@ -14,27 +14,24 @@ open ChaCha20.Spec Poly1305.Spec
 
 /-- The derived Poly1305 key is always 32 bytes (by construction). -/
 theorem derivePolyKey_size (key : Key) (nonce : Nonce) :
-    (derivePolyKey key nonce).bytes.length = 32 :=
-  (derivePolyKey key nonce).size
+    (derivePolyKey key nonce).val.length = 32 :=
+  (derivePolyKey key nonce).property
 
 /-! ## padTo16 -/
 
 theorem padTo16_length_mod (data : List UInt8) :
-    (padTo16 data).length % 16 = 0 := by
-  simp only [padTo16]
-  split
-  · omega
-  · simp only [List.length_append, List.length_replicate]; omega
+    (padTo16 data).val.length % 16 = 0 :=
+  (padTo16 data).property
 
 theorem padTo16_prefix (data : List UInt8) :
-    (padTo16 data).take data.length = data := by
+    (padTo16 data).val.take data.length = data := by
   simp only [padTo16]
   split
   · exact List.take_length
   · exact (List.take_append_of_le_length (Nat.le_refl _)).trans List.take_length
 
 theorem padTo16_length_ge (data : List UInt8) :
-    data.length ≤ (padTo16 data).length := by
+    data.length ≤ (padTo16 data).val.length := by
   simp only [padTo16]
   split
   · exact Nat.le_refl _
@@ -43,16 +40,21 @@ theorem padTo16_length_ge (data : List UInt8) :
 /-! ## le64 -/
 
 @[simp]
-theorem le64_length (n : Nat) : (le64 n).length = 8 := by
-  simp [le64]
+theorem le64_length (n : Nat) : (le64 n).val.length = 8 := (le64 n).property
 
 /-! ## macData structure -/
 
+/-- The underlying bytes of `macData`, for list-level reasoning. -/
+theorem macData_val (aad ct : List UInt8) :
+    (macData aad ct).val =
+      (padTo16 aad).val ++ (padTo16 ct).val ++ (le64 aad.length).val ++ (le64 ct.length).val :=
+  rfl
+
 /-- macData length is a multiple of 16 plus 16 (the length fields). -/
 theorem macData_length (aad ct : List UInt8) :
-    (macData aad ct).length =
-      (padTo16 aad).length + (padTo16 ct).length + 16 := by
-  simp only [macData, List.length_append, le64_length]
+    (macData aad ct).val.length =
+      (padTo16 aad).val.length + (padTo16 ct).val.length + 16 := by
+  simp only [macData_val, List.length_append, le64_length]
 
 /-! ## Tag splitting -/
 

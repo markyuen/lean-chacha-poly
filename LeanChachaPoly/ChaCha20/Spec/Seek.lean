@@ -27,21 +27,21 @@ theorem keystream_counter_shift (key : Key) (nonce : Nonce)
   have hnR : (len + offset * 64 + 63) / 64 = offset + (len + 63) / 64 := by omega
   rw [hnR, List.range_add, List.flatMap_append]
   have hAlen : ((List.range offset).flatMap
-      (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))).length
+      (fun i => (serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i))).val)).length
       = offset * 64 := blockStream_length key nonce ctr offset
   have hmap : (List.map (fun x => offset + x) (List.range ((len + 63) / 64))).flatMap
-      (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))
+      (fun i => (serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i))).val)
       = (List.range ((len + 63) / 64)).flatMap
-          (fun i => serializeBlock
-            (chacha20Block key nonce ((ctr + UInt32.ofNat offset) + UInt32.ofNat i))) := by
+          (fun i => (serializeBlock
+            (chacha20Block key nonce ((ctr + UInt32.ofNat offset) + UInt32.ofNat i))).val) := by
     rw [List.flatMap_map]; apply List.flatMap_congr; intro x _
-    congr 2; rw [UInt32.ofNat_add, add_assoc]
+    congr 3; rw [UInt32.ofNat_add, add_assoc]
   rw [hmap,
     show len + offset * 64 = ((List.range offset).flatMap
-        (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))).length + len
+        (fun i => (serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i))).val)).length + len
       from by rw [hAlen]; ring,
     show offset * 64 = ((List.range offset).flatMap
-        (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))).length
+        (fun i => (serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i))).val)).length
       from hAlen.symm,
     List.drop_take]
   simp

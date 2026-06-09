@@ -31,14 +31,14 @@ namespace ChaCha20.Spec
 theorem blockStream_length (key : Key) (nonce : Nonce)
     (counter : UInt32) (n : Nat) :
     ((List.range n).flatMap fun i =>
-      serializeBlock (chacha20Block key nonce (counter + UInt32.ofNat i))).length
+      (serializeBlock (chacha20Block key nonce (counter + UInt32.ofNat i))).val).length
     = n * 64 := by
   induction n with
   | zero => simp
   | succ n ih =>
     rw [List.range_succ, List.flatMap_append, List.length_append, ih]
     simp only [List.flatMap_singleton]
-    rw [serializeBlock_length _ (chacha20Block_size key nonce _)]
+    rw [(serializeBlock (chacha20Block key nonce (counter + UInt32.ofNat n))).property]
     omega
 
 /-! ## Keystream length -/

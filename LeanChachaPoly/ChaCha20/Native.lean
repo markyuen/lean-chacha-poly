@@ -17,12 +17,10 @@ open ChaCha20.Spec
 /-! ## Key/Nonce constructors from ByteArray -/
 
 def keyFromByteArray (b : ByteArray) (h : b.size = 32) : Key :=
-  { bytes := b.data.toList,
-    size := by rw [Array.length_toList]; exact h }
+  ⟨b.data.toList, by rw [Array.length_toList]; exact h⟩
 
 def nonceFromByteArray (b : ByteArray) (h : b.size = 12) : Nonce :=
-  { bytes := b.data.toList,
-    size := by rw [Array.length_toList]; exact h }
+  ⟨b.data.toList, by rw [Array.length_toList]; exact h⟩
 
 /-! ## ByteArray operations -/
 

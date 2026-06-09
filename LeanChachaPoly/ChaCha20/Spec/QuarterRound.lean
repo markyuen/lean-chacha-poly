@@ -65,9 +65,7 @@ theorem quarterRound_test_vector :
     quarterRound 0x11111111 0x01020304 0x9b8d6f43 0x01234567
     = (0xea2a92f4, 0xcb1cf8ce, 0x4581472e, 0x5881c4bb) := by decide
 
-/-! ## State operation: qr preserves size -/
-theorem qr_size (s : State) (i j k l : Fin 16) (h : s.size = 16) :
-    (qr s i j k l).size = 16 := by
-  simp [qr, h]
+/-! ## State operation: `qr` preserves size by construction now that
+    `State = Words 16` — `qr : State → State`, so `qr_size` is no longer needed. -/
 
 end ChaCha20.Spec

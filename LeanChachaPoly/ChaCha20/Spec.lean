@@ -1,3 +1,5 @@
+import LeanChachaPoly.Subtypes
+
 /-!
 # ChaCha20 Stream Cipher — Specification
 
@@ -29,27 +31,23 @@ namespace ChaCha20.Spec
 /-! ## Types -/
 
 /-- A 256-bit (32-byte) ChaCha20 key. -/
-structure Key where
-  bytes : List UInt8
-  size  : bytes.length = 32
+abbrev Key := Bytes 32
 
 /-- A 96-bit (12-byte) nonce. -/
-structure Nonce where
-  bytes : List UInt8
-  size  : bytes.length = 12
+abbrev Nonce := Bytes 12
 
 /-- Build a `Key` from a byte list, returning `none` unless it is exactly
     32 bytes. -/
 def Key.ofBytes? (bs : List UInt8) : Option Key :=
-  if h : bs.length = 32 then some { bytes := bs, size := h } else none
+  if h : bs.length = 32 then some ⟨bs, h⟩ else none
 
 /-- Build a `Nonce` from a byte list, returning `none` unless it is exactly
     12 bytes. -/
 def Nonce.ofBytes? (bs : List UInt8) : Option Nonce :=
-  if h : bs.length = 12 then some { bytes := bs, size := h } else none
+  if h : bs.length = 12 then some ⟨bs, h⟩ else none
 
 /-- The ChaCha20 internal state: 16 × UInt32 words. -/
-abbrev State := Array UInt32
+abbrev State := Words 16
 
 /-! ## Constants -/
 
@@ -64,11 +62,11 @@ def leToU32 (b0 b1 b2 b3 : UInt8) : UInt32 :=
               ||| (b2.toUInt32 <<< 16)
               ||| (b3.toUInt32 <<< 24)
 
-def u32ToLe (w : UInt32) : List UInt8 :=
-  [ UInt8.ofNat (w.toNat % 256),
-    UInt8.ofNat ((w.toNat >>> 8)  % 256),
-    UInt8.ofNat ((w.toNat >>> 16) % 256),
-    UInt8.ofNat ((w.toNat >>> 24) % 256) ]
+def u32ToLe (w : UInt32) : Bytes 4 :=
+  ⟨[ UInt8.ofNat (w.toNat % 256),
+     UInt8.ofNat ((w.toNat >>> 8)  % 256),
+     UInt8.ofNat ((w.toNat >>> 16) % 256),
+     UInt8.ofNat ((w.toNat >>> 24) % 256) ], rfl⟩
 
 /-! ## Quarter round (RFC 8439 §2.1) -/
 
@@ -86,16 +84,16 @@ def quarterRound (a b c d : UInt32) : UInt32 × UInt32 × UInt32 × UInt32 :=
 
 /-- Apply a quarter round in-place to positions i,j,k,l of a State. -/
 def qr (s : State) (i j k l : Fin 16) : State :=
-  let (a, b, c, d) := quarterRound s[i.val]! s[j.val]! s[k.val]! s[l.val]!
-  s.set! i.val a |>.set! j.val b |>.set! k.val c |>.set! l.val d
+  let (a, b, c, d) := quarterRound (Words.get s i) (Words.get s j) (Words.get s k) (Words.get s l)
+  Words.set (Words.set (Words.set (Words.set s i a) j b) k c) l d
 
 /-! ## Block function (RFC 8439 §2.3) -/
 
 /-- Initialize the 16-word state from key, nonce, counter. -/
 def initState (key : Key) (nonce : Nonce) (counter : UInt32) : State :=
-  let k := key.bytes
-  let n := nonce.bytes
-  #[ magic[0]!, magic[1]!, magic[2]!, magic[3]!,
+  let k := key.val
+  let n := nonce.val
+  ⟨#[ magic[0]!, magic[1]!, magic[2]!, magic[3]!,
      leToU32 k[0]!  k[1]!  k[2]!  k[3]!,
      leToU32 k[4]!  k[5]!  k[6]!  k[7]!,
      leToU32 k[8]!  k[9]!  k[10]! k[11]!,
@@ -107,7 +105,7 @@ def initState (key : Key) (nonce : Nonce) (counter : UInt32) : State :=
      counter,
      leToU32 n[0]! n[1]! n[2]!  n[3]!,
      leToU32 n[4]! n[5]! n[6]!  n[7]!,
-     leToU32 n[8]! n[9]! n[10]! n[11]! ]
+     leToU32 n[8]! n[9]! n[10]! n[11]! ], by rfl⟩
 
 /-- One double-round (column round + diagonal round). -/
 def doubleRound (s : State) : State :=
@@ -128,7 +126,8 @@ def tenDoubleRounds (s : State) : State :=
 
 /-- Add two states word-by-word. -/
 def addStates (s t : State) : State :=
-  Array.zipWith (· + ·) s t
+  ⟨Array.zipWith (· + ·) s.val t.val, by
+    simp only [Array.size_zipWith, s.property, t.property, Nat.min_self]⟩
 
 /-- The full ChaCha20 block function:
     mix for 20 rounds, then add back the original state. -/
@@ -137,8 +136,18 @@ def chacha20Block (key : Key) (nonce : Nonce) (counter : UInt32) : State :=
   addStates (tenDoubleRounds s) s
 
 /-- Serialize a 16-word state to 64 bytes (little-endian). -/
-def serializeBlock (s : State) : List UInt8 :=
-  s.toList.flatMap u32ToLe
+def serializeBlock (s : State) : Bytes 64 :=
+  ⟨s.val.toList.flatMap (fun w => (u32ToLe w).val), by
+    have hlen : ∀ xs : List UInt32,
+        (xs.flatMap (fun w => (u32ToLe w).val)).length = xs.length * 4 := by
+      intro xs
+      induction xs with
+      | nil => rfl
+      | cons x xs ih =>
+        rw [List.flatMap_cons, List.length_append, ih, (u32ToLe x).property,
+          List.length_cons]
+        omega
+    rw [hlen, Array.length_toList, s.property]⟩
 
 /-! ## Keystream and encryption (RFC 8439 §2.4) -/
 
@@ -146,7 +155,7 @@ def serializeBlock (s : State) : List UInt8 :=
 def keystream (key : Key) (nonce : Nonce) (counter : UInt32) (len : Nat) : List UInt8 :=
   let nBlocks := (len + 63) / 64
   let stream := (List.range nBlocks).flatMap fun i =>
-    serializeBlock (chacha20Block key nonce (counter + UInt32.ofNat i))
+    (serializeBlock (chacha20Block key nonce (counter + UInt32.ofNat i))).val
   stream.take len
 
 /-- XOR two byte lists element-wise (truncates to shorter). -/
@@ -188,20 +197,8 @@ def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
 
 /-! ### C4: Block size — proved in Spec.Block -/
 
-/-! ### C5: State size invariant -/
-theorem initState_size (key : Key) (nonce : Nonce) (counter : UInt32) :
-    (initState key nonce counter).size = 16 := by
-  simp [initState]
-
-theorem doubleRound_size (s : State) (h : s.size = 16) :
-    (doubleRound s).size = 16 := by
-  simp [doubleRound, qr]
-  exact h
-
-theorem tenDoubleRounds_size (s : State) (h : s.size = 16) :
-    (tenDoubleRounds s).size = 16 := by
-  simp [tenDoubleRounds]
-  repeat rw [doubleRound_size]
-  exact h
+/-! ### C5: State size invariant — now enforced by the `State = Words 16` type
+    (`initState`/`doubleRound`/`tenDoubleRounds` return `State` by construction),
+    so the former size theorems are unnecessary. -/
 
 end ChaCha20.Spec

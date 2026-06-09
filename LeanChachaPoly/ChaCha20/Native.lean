@@ -1,6 +1,7 @@
 import LeanChachaPoly.ChaCha20.Spec
 import LeanChachaPoly.ChaCha20.Spec.Xor
 import LeanChachaPoly.ChaCha20.Spec.Keystream
+import LeanChachaPoly.ChaCha20.Capstones
 
 /-!
 # ChaCha20 Native — ByteArray Bridge

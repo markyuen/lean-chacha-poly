@@ -1,38 +1,27 @@
 import LeanChachaPoly.Poly1305.Spec
+import LeanChachaPoly.Poly1305.Spec.Sum
 import Mathlib
 
 /-!
 # Poly1305 Message Blocking Properties
 
-Properties of `toBlocks`/`toBlockNats`: the functions that split a message into
-16-byte chunks. `toBlocks` returns typed blocks (`List Block × Option FinalBlock`);
-`toBlockNats` is the numeric (`List Nat`) engine the proofs induct over, tied to
-`toBlocks` by `blockNats_toBlocks`.
-
-## Key properties needed
-
-1. Each full block has its 129th bit set (`blockToNat` adds 2¹²⁸)
-2. The final partial block has its (8·length)th bit set
-3. `toBlocks` terminates and covers the entire input
-4. Number of blocks = ⌈msg.length / 16⌉
+Block-value bounds and the `toBlocks` / `toBlockNats` correspondence. `toBlocks`
+returns typed blocks (`List Block × Option FinalBlock`); `toBlockNats` is the numeric
+(`List Nat`) engine the injectivity/security proofs induct over, and the two agree by
+`blockNats_toBlocks`. A full block carries the `2¹²⁸` high bit (so its value lies in
+`[2¹²⁸, 2¹²⁹)`); the final partial block carries a `2^(8·len)` bit instead.
 -/
 
 namespace Poly1305.Spec
 
 /-! ## blockToNat bounds -/
 
-/-- A full block's value is at least 2¹²⁸ (the high bit is set). -/
+/-- **Supporting.** A full block's value is at least 2¹²⁸ (the high bit is set). -/
 theorem blockToNat_ge (block : Block) : 2 ^ 128 ≤ blockToNat block := by
   simp [blockToNat]
 
-/-- Folding `(acc + g i)` over a list is the running sum. -/
-private theorem foldl_add_eq_sum {α : Type} (l : List α) (g : α → Nat) (init : Nat) :
-    l.foldl (fun acc i => acc + g i) init = init + (l.map g).sum := by
-  induction l generalizing init with
-  | nil => simp
-  | cons a t ih => simp [ih]; ring
-
-/-- A full block's value is less than 2¹²⁹ (the 16 little-endian bytes sum to
+/-- **Supporting.** A full block's value is less than 2¹²⁹ (the 16 little-endian bytes
+    sum to
     `< 2¹²⁸`, plus the `2¹²⁸` high bit). Each positional term is `≤ 255·2^(8i)`,
     and the geometric sum is `2¹²⁸ − 1`. -/
 theorem blockToNat_lt (block : Block) : blockToNat block < 2 ^ 129 := by
@@ -96,55 +85,5 @@ theorem blockNats_toBlocks (msg : List UInt8) :
     rw [go_cons bs hne, dif_neg hlen, toBlocks_go_cons bs hne, dif_neg hlen]
     simp [blockNats]
 
-/-! ## Block count -/
-
-private theorem goLen (bs : List UInt8) :
-    (toBlockNats.go bs).length = (bs.length + 15) / 16 := by
-  induction bs using toBlockNats.go.induct with
-  | case1 => simp [toBlockNats.go]
-  | case2 bs hne _block _rest hlen ih =>
-    rw [go_cons bs hne, dif_pos hlen, List.length_cons, ih, List.length_drop]
-    have hh := hlen; rw [List.length_take] at hh
-    omega
-  | case3 bs hne _block hlen =>
-    rw [go_cons bs hne, dif_neg hlen]
-    have hh := hlen; rw [List.length_take] at hh
-    have hpos : bs.length ≠ 0 := fun e => hne (List.length_eq_zero_iff.mp e)
-    simp only [List.length_cons, List.length_nil]
-    omega
-
-/-- Number of blocks equals ⌈msg.length / 16⌉. -/
-theorem toBlockNats_length (msg : List UInt8) (_hne : msg ≠ []) :
-    (toBlockNats msg).length = (msg.length + 15) / 16 := goLen msg
-
-/-! ## Structural: toBlockNats on append -/
-
-private theorem goAppend (ys xs : List UInt8) (h0 : xs.length % 16 = 0) :
-    toBlockNats.go (xs ++ ys) = toBlockNats.go xs ++ toBlockNats.go ys := by
-  induction xs using toBlockNats.go.induct with
-  | case1 => simp [toBlockNats.go]
-  | case2 xs hne _block rest hlen ih =>
-    have hrest : rest = xs.drop 16 := rfl
-    have hge : 16 ≤ xs.length := by have := hlen; rw [List.length_take] at this; omega
-    have hxy : xs ++ ys ≠ [] := fun e => hne (List.append_eq_nil_iff.mp e).1
-    have htk : (xs ++ ys).take 16 = xs.take 16 := List.take_append_of_le_length hge
-    have hdp : (xs ++ ys).drop 16 = xs.drop 16 ++ ys := List.drop_append_of_le_length hge
-    have h' : ((xs ++ ys).take 16).length = 16 := by rw [htk]; exact hlen
-    rw [go_cons (xs ++ ys) hxy, dif_pos h', go_cons xs hne, dif_pos hlen, hdp]
-    rw [hrest] at ih
-    rw [ih (by rw [List.length_drop]; omega),
-      blockToNat_congr (b1 := ⟨(xs ++ ys).take 16, h'⟩) (b2 := ⟨xs.take 16, hlen⟩) htk,
-      List.cons_append]
-  | case3 xs hne _block hlen =>
-    exfalso
-    have hh := hlen; rw [List.length_take] at hh
-    have hpos : xs.length ≠ 0 := fun e => hne (List.length_eq_zero_iff.mp e)
-    omega
-
-/-- When the first part is a multiple of 16 bytes, blocks split along the
-    boundary. The compositionality property a streaming MAC would rely on. -/
-theorem toBlockNats_append_aligned (xs ys : List UInt8)
-    (h : xs.length % 16 = 0) :
-    toBlockNats (xs ++ ys) = toBlockNats xs ++ toBlockNats ys := goAppend ys xs h
 
 end Poly1305.Spec

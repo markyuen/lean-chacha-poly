@@ -194,13 +194,7 @@ theorem accumulate_lt_P (r : Nat) (blocks : List Nat) :
     simp only [List.foldl_cons]
     exact ih _ (step_lt_P r acc block)
 
-/-! ### P3: Accumulation over append (streaming compositionality) -/
-theorem accumulate_append (r : Nat) (xs ys : List Nat) :
-    accumulate r (xs ++ ys) =
-      ys.foldl (step r) (accumulate r xs) := by
-  simp [accumulate, List.foldl_append]
-
-/-! ### P4: Empty message tag -/
+/-! ### Empty message tag -/
 theorem poly1305_empty (key : Key) :
     poly1305 key [] =
       natToLe16 (extractS key % 2^128) := by

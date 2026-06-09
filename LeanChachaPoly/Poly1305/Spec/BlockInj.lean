@@ -1,4 +1,5 @@
 import LeanChachaPoly.Poly1305.Spec
+import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
 import LeanChachaPoly.Poly1305.Spec.Security
 import Mathlib
@@ -22,13 +23,6 @@ namespace Poly1305.Spec
 def leVal : List UInt8 → Nat
   | [] => 0
   | b :: bs => b.toNat + 256 * leVal bs
-
-/-- Folding `(acc + g i)` over a list is the running sum. -/
-private theorem foldl_add_eq_sum {α : Type*} (l : List α) (g : α → Nat) (init : Nat) :
-    l.foldl (fun acc i => acc + g i) init = init + (l.map g).sum := by
-  induction l generalizing init with
-  | nil => simp
-  | cons a t ih => simp [ih]; ring
 
 /-- `leVal` fits in `len` base-256 digits. -/
 theorem leVal_lt (a : List UInt8) : leVal a < 256 ^ a.length := by

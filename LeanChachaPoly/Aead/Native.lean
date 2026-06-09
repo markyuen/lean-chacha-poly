@@ -1,4 +1,5 @@
 import LeanChachaPoly.Aead.Spec
+import LeanChachaPoly.Aead.Capstones
 import LeanChachaPoly.ChaCha20.Native
 import LeanChachaPoly.Poly1305.Native
 

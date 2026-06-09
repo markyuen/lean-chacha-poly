@@ -43,10 +43,4 @@ theorem macData_ct_inj (aad ct₁ ct₂ : List UInt8)
   replace hv := List.append_cancel_left hv
   exact List.append_inj_left hv hlen
 
-/-! ## Determinism -/
-
-/-- macData is a pure function; same inputs → same output. -/
-theorem macData_det (aad ct : List UInt8) :
-    macData aad ct = macData aad ct := rfl
-
 end Aead.Spec

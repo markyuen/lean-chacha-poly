@@ -1,4 +1,5 @@
 import LeanChachaPoly.Poly1305.Spec
+import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
 import LeanChachaPoly.Poly1305.Spec.Accumulate
 import Mathlib
@@ -31,14 +32,6 @@ namespace Poly1305.Spec
 open scoped BigOperators
 
 /-! ## Blocks are field elements (`< P`) -/
-
-/-- Folding `(acc + g i)` over a list is the running sum (local copy; the one in
-    `Blocking.lean` is `private`). -/
-private theorem foldl_add_eq_sum {α : Type*} (l : List α) (g : α → Nat) (init : Nat) :
-    l.foldl (fun acc i => acc + g i) init = init + (l.map g).sum := by
-  induction l generalizing init with
-  | nil => simp
-  | cons a t ih => simp [ih]; ring
 
 /-- The geometric bound `∑_{i<L} 255·2^(8i) = 2^(8L) − 1 < 2^(8L)`. -/
 private theorem geom_lt (L : Nat) :

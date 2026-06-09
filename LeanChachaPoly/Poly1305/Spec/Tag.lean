@@ -1,4 +1,5 @@
 import LeanChachaPoly.Poly1305.Spec
+import LeanChachaPoly.Poly1305.Spec.Sum
 import Mathlib
 
 /-!
@@ -57,15 +58,6 @@ private theorem digitSum (b : Nat) (hb : 0 < b) :
     simp only [pow_zero, Nat.div_one, mul_one]
     have := Nat.div_add_mod x b
     omega
-
-/-- Folding `(acc + g i)` over a list is the running sum. -/
-private theorem foldl_add_eq_sum {α : Type*} (l : List α) (g : α → Nat) (init : Nat) :
-    l.foldl (fun acc i => acc + g i) init = init + (l.map g).sum := by
-  induction l generalizing init with
-  | nil => simp
-  | cons a t ih => simp [ih]; ring
-
-theorem natToLe16_length (x : Nat) : (natToLe16 x).val.length = 16 := (natToLe16 x).property
 
 /-- The serialized tag round-trips: deserializing the 16 little-endian bytes of
     `x` recovers `x`, for any `x < 2¹²⁸`. So the Poly1305 tag is exactly

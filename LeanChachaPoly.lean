@@ -1,13 +1,14 @@
 import LeanChachaPoly.Subtypes
 import LeanChachaPoly.ChaCha20.Spec
 import LeanChachaPoly.ChaCha20.Spec.QuarterRound
-import LeanChachaPoly.ChaCha20.Spec.Block
 import LeanChachaPoly.ChaCha20.Spec.Keystream
 import LeanChachaPoly.ChaCha20.Spec.Seek
 import LeanChachaPoly.ChaCha20.Spec.Permutation
 import LeanChachaPoly.ChaCha20.Spec.Xor
+import LeanChachaPoly.ChaCha20.Capstones
 import LeanChachaPoly.ChaCha20.Native
 import LeanChachaPoly.Poly1305.Spec
+import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
 import LeanChachaPoly.Poly1305.Spec.Accumulate
 import LeanChachaPoly.Poly1305.Spec.Security
@@ -19,4 +20,5 @@ import LeanChachaPoly.Aead.Spec
 import LeanChachaPoly.Aead.Spec.KeyDerivation
 import LeanChachaPoly.Aead.Spec.MacData
 import LeanChachaPoly.Aead.Spec.Security
+import LeanChachaPoly.Aead.Capstones
 import LeanChachaPoly.Aead.Native

@@ -167,38 +167,13 @@ def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
     (msg : List UInt8) : List UInt8 :=
   xorBytes msg (keystream key nonce counter msg.length)
 
-
-/-! ================================================================
-    CAPSTONE THEOREMS
-    ================================================================ -/
-
-/-! ### C1: Involution
-
-    Applying chacha20 twice with the same parameters returns the
-    original message. This is the fundamental correctness guarantee:
-    encrypt and decrypt are the same operation.
-
-    Proof sketch:
-      chacha20 k n ctr (chacha20 k n ctr msg)
-      = xorBytes (xorBytes msg ks) ks     [unfold twice]
-      = msg                                [xorBytes_self_cancel]
-    where ks = keystream k n ctr msg.length, and the length
-    argument is satisfied by keystream_length.
-
-    `chacha20_involutive` (C1) and `chacha20_length` (C2) are proved in
-    `ChaCha20.Spec.Keystream`: their proofs need `xorBytes_self_cancel`
-    (Spec.Xor) and `keystream_length` (Spec.Keystream), which both import
-    this file, so they cannot be discharged here without a cyclic import.
-    They keep the `ChaCha20.Spec.*` qualified name regardless of file. -/
-
-/-! ### C2: Length preservation — proved in Spec.Keystream -/
-
-/-! ### C3: Keystream length — proved in Spec.Keystream -/
-
-/-! ### C4: Block size — proved in Spec.Block -/
-
-/-! ### C5: State size invariant — now enforced by the `State = Words 16` type
-    (`initState`/`doubleRound`/`tenDoubleRounds` return `State` by construction),
-    so the former size theorems are unnecessary. -/
+/-!
+This file is definitions only. The properties live alongside them:
+- `chacha20_involutive` / `chacha20_length` — `ChaCha20.Capstones`
+- `quarterRound_bijective` — `Spec.Permutation`
+- keystream length / CTR seekability — `Spec.Keystream` / `Spec.Seek`
+State size (`= 16`) is enforced by the `State = Words 16` type, so no size theorems
+are needed.
+-/
 
 end ChaCha20.Spec

@@ -47,12 +47,6 @@ theorem rotl32_xor (n : UInt32) (x y : UInt32) :
 theorem xor_self_cancel (x y : UInt32) : (x ^^^ y) ^^^ y = x := by
   simp [UInt32.xor_assoc, UInt32.xor_self]
 
-/-! ## Quarter round structure -/
-
-/-- Quarter round on (a,b,c,d) depends only on those four values. -/
-theorem quarterRound_deterministic (a b c d : UInt32) :
-    quarterRound a b c d = quarterRound a b c d := rfl
-
 /-! ## RFC 8439 §2.1.1 test vector
 
     Input:  a=0x11111111, b=0x01020304, c=0x9b8d6f43, d=0x01234567
@@ -60,12 +54,10 @@ theorem quarterRound_deterministic (a b c d : UInt32) :
 
     Proved by `decide` since all values are concrete UInt32.
     This serves as a spec sanity-check: if this fails, the
-    `quarterRound` definition is wrong. -/
+    `quarterRound` definition is wrong. The §2.3.2 full block-function vector is
+    checked in `Tests/ChaCha20Test.lean`. -/
 theorem quarterRound_test_vector :
     quarterRound 0x11111111 0x01020304 0x9b8d6f43 0x01234567
     = (0xea2a92f4, 0xcb1cf8ce, 0x4581472e, 0x5881c4bb) := by decide
-
-/-! ## State operation: `qr` preserves size by construction now that
-    `State = Words 16` — `qr : State → State`, so `qr_size` is no longer needed. -/
 
 end ChaCha20.Spec

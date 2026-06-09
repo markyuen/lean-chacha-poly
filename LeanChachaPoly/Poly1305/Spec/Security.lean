@@ -401,6 +401,30 @@ theorem collision_union_bound [Fact (Nat.Prime P)] (B B' : List Nat)
           Finset.sum_le_sum (fun c _ => poly1305_almost_delta_universal B B' hpos hpos' hne c)
     _ = cands.card * max B.length B'.length := by rw [Finset.sum_const, smul_eq_mul]
 
+/-! ## The candidate count (the `8` in `8⌈L/16⌉`)
+
+    The accumulators lie in `[0, P)` with `P < 4·2¹²⁸`, so an integer difference
+    of two of them lies in `(−P, P)`. Such a difference congruent to a fixed
+    `Δ mod 2¹²⁸` is one of the 8 candidates `Δ%2¹²⁸ + k·2¹²⁸` for `k ∈ [−4, 3]`
+    — this is exactly what bounds `|cands| ≤ 8`. -/
+
+/-- Every integer in `(−P, P)` congruent to `Δ mod 2¹²⁸` is one of the 8
+    candidates `Δ%2¹²⁸ + k·2¹²⁸`, `k ∈ [−4, 3]`. -/
+theorem candidate_cover (Δ d : ℤ) (h1 : -(P : ℤ) < d) (h2 : d < (P : ℤ))
+    (h3 : d % 2 ^ 128 = Δ % 2 ^ 128) :
+    d ∈ (Finset.Icc (-4 : ℤ) 3).image (fun k => Δ % 2 ^ 128 + k * 2 ^ 128) := by
+  have hP : (P : ℤ) = 2 ^ 130 - 5 := by unfold P; omega
+  rw [hP] at h1 h2
+  rw [Finset.mem_image]
+  refine ⟨(d - Δ % 2 ^ 128) / 2 ^ 128, ?_, ?_⟩
+  · rw [Finset.mem_Icc]; omega
+  · omega
+
+/-- The candidate set has at most 8 elements — the `8` of the `8⌈L/16⌉` bound. -/
+theorem candidate_card (Δ : ℤ) :
+    ((Finset.Icc (-4 : ℤ) 3).image (fun k => Δ % 2 ^ 128 + k * 2 ^ 128)).card ≤ 8 :=
+  le_trans Finset.card_image_le (by decide)
+
 /-! ## Lifting the bound to messages
 
     `toBlocks` outputs exactly the field-element, nonzero blocks the bound needs,

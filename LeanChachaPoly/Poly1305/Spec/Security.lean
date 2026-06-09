@@ -367,6 +367,40 @@ theorem poly1305_almost_delta_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     _ ≤ max (msgPoly B).natDegree (msgPoly B').natDegree := by rw [hE]; exact Polynomial.natDegree_sub_le _ _
     _ ≤ max B.length B'.length := max_le_max (msgPoly_natDegree_le B) (msgPoly_natDegree_le B')
 
+open Polynomial in
+/-- **Union-bound reduction toward the byte-level forgery bound.** If the keys
+    causing a byte-level collision are covered by a finite set `cands` of
+    field-offsets `c` (each collision realizing `eval B = eval B' + c`), then the
+    number of such keys is at most `|cands| · max #blocks`. Combined with the
+    arithmetic fact that an integer difference in `(−P, P)` congruent to a fixed
+    `Δ mod 2¹²⁸` takes at most 8 values, this yields the famous `8⌈L/16⌉` factor.
+    The `≤ 8` candidate count is the sole remaining arithmetic gap. -/
+theorem collision_union_bound [Fact (Nat.Prime P)] (B B' : List Nat)
+    (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
+    (hne : B ≠ B') (cands : Finset (ZMod P)) :
+    (Finset.univ.filter (fun r : ZMod P =>
+      ∃ c ∈ cands, (msgPoly B).eval r = (msgPoly B').eval r + c)).card
+      ≤ cands.card * max B.length B'.length := by
+  classical
+  have hsub : (Finset.univ.filter (fun r : ZMod P =>
+      ∃ c ∈ cands, (msgPoly B).eval r = (msgPoly B').eval r + c))
+      ⊆ cands.biUnion (fun c => Finset.univ.filter (fun r : ZMod P =>
+          (msgPoly B).eval r = (msgPoly B').eval r + c)) := by
+    intro r hr
+    rw [Finset.mem_filter] at hr
+    obtain ⟨c, hc, heq⟩ := hr.2
+    rw [Finset.mem_biUnion]
+    exact ⟨c, hc, Finset.mem_filter.mpr ⟨Finset.mem_univ r, heq⟩⟩
+  calc (Finset.univ.filter (fun r : ZMod P =>
+        ∃ c ∈ cands, (msgPoly B).eval r = (msgPoly B').eval r + c)).card
+      ≤ (cands.biUnion (fun c => Finset.univ.filter (fun r : ZMod P =>
+          (msgPoly B).eval r = (msgPoly B').eval r + c))).card := Finset.card_le_card hsub
+    _ ≤ ∑ c ∈ cands, (Finset.univ.filter (fun r : ZMod P =>
+          (msgPoly B).eval r = (msgPoly B').eval r + c)).card := Finset.card_biUnion_le
+    _ ≤ ∑ _c ∈ cands, max B.length B'.length :=
+          Finset.sum_le_sum (fun c _ => poly1305_almost_delta_universal B B' hpos hpos' hne c)
+    _ = cands.card * max B.length B'.length := by rw [Finset.sum_const, smul_eq_mul]
+
 /-! ## Lifting the bound to messages
 
     `toBlocks` outputs exactly the field-element, nonzero blocks the bound needs,

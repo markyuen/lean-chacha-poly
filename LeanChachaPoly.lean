@@ -3,6 +3,7 @@ import LeanChachaPoly.ChaCha20.Spec.QuarterRound
 import LeanChachaPoly.ChaCha20.Spec.Block
 import LeanChachaPoly.ChaCha20.Spec.Keystream
 import LeanChachaPoly.ChaCha20.Spec.Seek
+import LeanChachaPoly.ChaCha20.Spec.Permutation
 import LeanChachaPoly.ChaCha20.Spec.Xor
 import LeanChachaPoly.ChaCha20.Native
 import LeanChachaPoly.Poly1305.Spec

@@ -20,7 +20,7 @@ namespace Aead.Spec
 
 open ChaCha20.Spec Poly1305.Spec
 
-/-- **Verify-before-decrypt.** If `decrypt` returns `some _`, then the received
+/-- **Capstone (verify-before-decrypt).** If `decrypt` returns `some _`, then the received
     tag (the last 16 bytes) equals the Poly1305 tag recomputed from the derived
     one-time key over `macData aad ciphertext`. Authentication is checked before
     any plaintext is produced. -/
@@ -47,7 +47,7 @@ private theorem ofNat_inj_lt {a b : Nat} (ha : a < 256) (hb : b < 256)
   rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)] at this
   exact this
 
-/-- The 8-byte little-endian length encoding is injective on 64-bit values. -/
+/-- **Key lemma.** The 8-byte little-endian length encoding is injective on 64-bit values. -/
 theorem le64_inj (n m : Nat) (hn : n < 2 ^ 64) (hm : m < 2 ^ 64)
     (h : le64 n = le64 m) : n = m := by
   have hv : (le64 n).val = (le64 m).val := congrArg Subtype.val h
@@ -79,7 +79,7 @@ theorem macData_aad_eq (aad₁ aad₂ ct : List UInt8)
     _ = (padTo16 aad₂).val.take aad₂.length := by rw [hpad, hlen]
     _ = aad₂ := padTo16_prefix aad₂
 
-/-- **AAD binding.** Changing the associated data changes the Poly1305 MAC input
+/-- **Key lemma (AAD binding).** Changing the associated data changes the Poly1305 MAC input
     — the deterministic core of "decrypt rejects on AAD mismatch". -/
 theorem macData_aad_binding (aad₁ aad₂ ct : List UInt8)
     (h1 : aad₁.length < 2 ^ 64) (h2 : aad₂.length < 2 ^ 64) (hne : aad₁ ≠ aad₂) :
@@ -99,7 +99,7 @@ theorem macData_ct_eq (aad ct₁ ct₂ : List UInt8)
     _ = (padTo16 ct₂).val.take ct₂.length := by rw [hpad, hlen]
     _ = ct₂ := padTo16_prefix ct₂
 
-/-- **Ciphertext binding.** Changing the ciphertext changes the Poly1305 MAC
+/-- **Key lemma (ciphertext binding).** Changing the ciphertext changes the Poly1305 MAC
     input — the deterministic core of "decrypt rejects on a ciphertext change". -/
 theorem macData_ct_binding (aad ct₁ ct₂ : List UInt8)
     (h1 : ct₁.length < 2 ^ 64) (h2 : ct₂.length < 2 ^ 64) (hne : ct₁ ≠ ct₂) :
@@ -118,7 +118,7 @@ private theorem padTo16_length_eq {a b : List UInt8} (hl : a.length = b.length) 
     · simp [List.length_append, List.length_replicate]
   rw [formula, formula, hl]
 
-/-- **The MAC input determines both the AAD and the ciphertext.** Distinct
+/-- **Capstone.** The MAC input determines both the AAD and the ciphertext. Distinct
     `(aad, ct)` pairs always produce distinct Poly1305 inputs — the full
     structural authenticity guarantee `macData` provides. -/
 theorem macData_inj (aad₁ ct₁ aad₂ ct₂ : List UInt8)

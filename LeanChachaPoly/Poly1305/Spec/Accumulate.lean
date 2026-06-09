@@ -49,6 +49,7 @@ def evalPoly (r : Nat) (blocks : List Nat) : Nat :=
     `s·r^len + accumulate` — the key lemma behind both the cons-recurrence
     and the polynomial equivalence. Stated as a congruence mod P so the
     empty case is `s ≡ s` with no side condition. -/
+/-- **Supporting.** Folding `step r` from an arbitrary start `s` distributes. -/
 theorem accumulate_init (r : Nat) (bs : List Nat) (s : Nat) :
     bs.foldl (step r) s ≡ s * r ^ bs.length + accumulate r bs [MOD P] := by
   induction bs generalizing s with
@@ -69,13 +70,9 @@ theorem accumulate_init (r : Nat) (bs : List Nat) (s : Nat) :
       _ ≡ s * r ^ (bs.length + 1) + bs.foldl (step r) (step r 0 b) [MOD P] :=
             ((ih _).symm.add_left _)
 
-/-- Prepending a block shifts the polynomial degree: the new (first) block `m`
-    is multiplied by the *highest* power of `r`, namely `r^(rest.length+1)`.
-
-    NOTE: the previous statement was **incorrect** — it gave `m` the power `r¹`
-    and `accumulate rest` the power `rⁿ`. But `foldl` processes the head first,
-    so `m` accrues the highest power. (Counterexample to the old form:
-    `r=3, m=1, rest=[2]` gives `accumulate = 15`; the old RHS evaluated to `21`.) -/
+/-- **Supporting.** Prepending a block shifts the polynomial degree: the new (first)
+    block `m` is multiplied by the *highest* power of `r`, namely `r^(rest.length+1)`
+    (`foldl` processes the head first, so it accrues the highest power). -/
 theorem accumulate_cons (r m : Nat) (rest : List Nat) :
     accumulate r (m :: rest) =
       (m * Nat.pow r (rest.length + 1) + accumulate r rest) % P := by
@@ -94,9 +91,9 @@ theorem accumulate_cons (r m : Nat) (rest : List Nat) :
 
 /-! ## The equivalence theorem -/
 
-/-- The iterative accumulation computes the same value as the closed-form
-    polynomial evaluation: Poly1305's fold *is* polynomial evaluation in GF(P).
-    This is the property the security analysis reasons about. -/
+/-- **Key lemma.** The iterative accumulation computes the same value as the
+    closed-form polynomial evaluation: Poly1305's fold *is* polynomial evaluation in
+    GF(P). This is the property the security analysis reasons about. -/
 theorem accumulate_eq_poly (r : Nat) (blocks : List Nat) :
     accumulate r blocks = evalPoly r blocks := by
   induction blocks with
@@ -111,7 +108,7 @@ theorem accumulate_eq_poly (r : Nat) (blocks : List Nat) :
 
 /-! ## Linearity: accumulate is linear in each block -/
 
-/-- Scaling a single block scales the tag proportionally. -/
+/-- **Supporting.** A single-block accumulation is just `(m·r) mod P`. -/
 theorem accumulate_single (r m : Nat) :
     accumulate r [m] = (m * r) % P := by
   simp [accumulate, step]

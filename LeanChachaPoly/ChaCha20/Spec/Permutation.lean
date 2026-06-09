@@ -32,20 +32,24 @@ def quarterRoundInv : UInt32 × UInt32 × UInt32 × UInt32 → UInt32 × UInt32 
     let a0 := a1 - b0
     (a0, b0, c0, d0)
 
+/-- **Key lemma.** `quarterRoundInv` undoes `quarterRound'`. (Discharged by
+    `bv_decide`, which adds a trusted native SAT-certificate axiom — the library's
+    only non-foundational dependency.) -/
 theorem quarterRoundInv_quarterRound (p : UInt32 × UInt32 × UInt32 × UInt32) :
     quarterRoundInv (quarterRound' p) = p := by
   obtain ⟨a, b, c, d⟩ := p
   simp only [quarterRound', quarterRound, quarterRoundInv, rotl32, Prod.mk.injEq]
   bv_decide
 
+/-- **Key lemma.** `quarterRound'` undoes `quarterRoundInv` (see the axiom note above). -/
 theorem quarterRound_quarterRoundInv (p : UInt32 × UInt32 × UInt32 × UInt32) :
     quarterRound' (quarterRoundInv p) = p := by
   obtain ⟨a, b, c, d⟩ := p
   simp only [quarterRound', quarterRound, quarterRoundInv, rotl32, Prod.mk.injEq]
   bv_decide
 
-/-- **The quarter round is a bijection** of `UInt32⁴`, with explicit inverse
-    `quarterRoundInv`. -/
+/-- **Capstone.** The quarter round is a bijection of `UInt32⁴`, with explicit
+    inverse `quarterRoundInv` — the structural reason ChaCha20 is permutation-based. -/
 theorem quarterRound_bijective : Function.Bijective quarterRound' :=
   Function.bijective_iff_has_inverse.mpr
     ⟨quarterRoundInv, quarterRoundInv_quarterRound, quarterRound_quarterRoundInv⟩

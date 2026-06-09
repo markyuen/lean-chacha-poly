@@ -15,14 +15,17 @@ with the message.
 - The core correctness property (involution) is elegant: XOR is
   its own inverse, so encrypt = decrypt. The proof decomposes
   cleanly into keystream-length correctness and XOR cancellation.
-- No external dependencies, no axioms.
+- This `Spec` file is definitions only and depends on nothing beyond
+  core Lean (the proof files use Mathlib).
 
 ## Module structure
 
-  ChaCha20.Spec          ← this file: types, definitions, capstones
-  ChaCha20.Spec.QuarterRound  ← quarter-round properties
-  ChaCha20.Spec.Block         ← block function properties
-  ChaCha20.Spec.Keystream     ← keystream generation properties
+  ChaCha20.Spec               ← this file: types and definitions
+  ChaCha20.Capstones          ← chacha20_length / chacha20_involutive
+  ChaCha20.Spec.QuarterRound  ← rotation/XOR lemmas, RFC test vector
+  ChaCha20.Spec.Keystream     ← keystream length
+  ChaCha20.Spec.Seek          ← CTR seekability
+  ChaCha20.Spec.Permutation   ← quarterRound is a bijection
   ChaCha20.Spec.Xor           ← XOR cancellation lemmas
   ChaCha20.Native             ← ByteArray bridge + equivalence
 -/

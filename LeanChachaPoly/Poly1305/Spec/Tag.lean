@@ -15,14 +15,14 @@ namespace Poly1305.Spec
 
 /-! ## One-time-pad masking -/
 
-/-- Adding a constant in `ZMod 2¹²⁸` is a bijection — the abstract one-time pad:
+/-- **Supporting.** Adding a constant in `ZMod 2¹²⁸` is a bijection — the abstract one-time pad:
     for fixed `acc`, the map `s ↦ acc + s` permutes the tag space, so a uniform
     `s` yields a uniform tag. -/
 theorem tag_mask_bijective (acc : ZMod (2 ^ 128)) :
     Function.Bijective (fun s : ZMod (2 ^ 128) => acc + s) :=
   (Equiv.addLeft acc).bijective
 
-/-- Concretely on the spec's `Nat` arithmetic: for fixed `acc`, the masking map
+/-- **Supporting.** Concretely on the spec's `Nat` arithmetic: for fixed `acc`, the masking map
     `s ↦ (acc + s) mod 2¹²⁸` is injective over the 128-bit inputs. Distinct
     pads give distinct tags, so the tag determines no information about `acc`
     beyond what one tag–pad pair reveals. -/
@@ -59,7 +59,7 @@ private theorem digitSum (b : Nat) (hb : 0 < b) :
     have := Nat.div_add_mod x b
     omega
 
-/-- The serialized tag round-trips: deserializing the 16 little-endian bytes of
+/-- **Key lemma.** The serialized tag round-trips: deserializing the 16 little-endian bytes of
     `x` recovers `x`, for any `x < 2¹²⁸`. So the Poly1305 tag is exactly
     `(accumulate + s) mod 2¹²⁸` (fully reduced), not a lossy truncation. -/
 theorem leToNat16_natToLe16 (x : Nat) (hx : x < 2 ^ 128) :
@@ -82,7 +82,7 @@ theorem leToNat16_natToLe16 (x : Nat) (hx : x < 2 ^ 128) :
         rw [show (256 : Nat) = 2 ^ 8 from rfl, ← pow_mul, Nat.mul_comm]])]
   exact digitSum 256 (by norm_num) 16 x (by rw [show (256 : Nat) = 2 ^ 8 from rfl, ← pow_mul]; exact hx)
 
-/-- **The tag is fully reduced.** Reading the 16-byte Poly1305 output back as a
+/-- **Capstone.** The tag is fully reduced: reading the 16-byte Poly1305 output back as a
     number gives exactly `(accumulate r blocks + s) mod 2¹²⁸` — the serialization
     loses nothing, so the tag is the true reduced value rather than a truncation. -/
 theorem poly1305_value (key : Key) (msg : List UInt8) :

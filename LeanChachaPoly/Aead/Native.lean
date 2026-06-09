@@ -24,6 +24,7 @@ def decrypt (key : Key) (nonce : Nonce)
 
 /-! ## Bridge theorems -/
 
+/-- **Capstone (bridge).** Native AEAD encrypt equals the spec on `toList`. -/
 theorem encrypt_eq_spec (key : Key) (nonce : Nonce)
     (plaintext aad : ByteArray) :
     (encrypt key nonce plaintext aad).data.toList =
@@ -31,6 +32,7 @@ theorem encrypt_eq_spec (key : Key) (nonce : Nonce)
         plaintext.data.toList aad.data.toList := by
   simp [encrypt]
 
+/-- **Capstone (bridge).** Native AEAD decrypt equals the spec on `toList`. -/
 theorem decrypt_eq_spec (key : Key) (nonce : Nonce)
     (ciphertextAndTag aad : ByteArray) :
     decrypt key nonce ciphertextAndTag aad =
@@ -41,6 +43,7 @@ theorem decrypt_eq_spec (key : Key) (nonce : Nonce)
 
 /-! ## Derived capstone -/
 
+/-- **Capstone.** The AEAD roundtrip for the ByteArray implementation. -/
 theorem decrypt_encrypt (key : Key) (nonce : Nonce)
     (plaintext aad : ByteArray) :
     decrypt key nonce (encrypt key nonce plaintext aad) aad

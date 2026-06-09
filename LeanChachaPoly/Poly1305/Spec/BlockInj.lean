@@ -96,7 +96,7 @@ theorem finalBlockToNat_eq (a : List UInt8) (h : a.length ≤ 16) :
         (a.get i).toNat * 2 ^ (i.val * 8) = (a.get i).toNat * 256 ^ i.val)]
   rw [finSum_eq_rangeSum, rangeSum_eq_leVal]
 
-/-- **Chunk-encoding injectivity (RFC 8439 §2.5.1).** Distinct final blocks —
+/-- **Key lemma (chunk-encoding injectivity, RFC 8439 §2.5.1).** Distinct final blocks —
     whether differing in content or length — map to distinct field elements.
     The `2^(8·len)` high bit puts the value in `[2^(8·len), 2^(8·len+1))`, so
     the length is determined, and within a length the content sum is injective. -/
@@ -154,7 +154,7 @@ private theorem leToNat16_eq_leVal (bs : List UInt8) (h : bs.length = 16) :
     Fin.sum_univ_eq_sum_range (fun j => (bs.getD j default).toNat * 256 ^ j) 16, ← h]
   exact rangeSum_eq_leVal bs
 
-/-- Full 16-byte blocks inject (the `2¹²⁸` high bit is constant, so the content
+/-- **Key lemma.** Full 16-byte blocks inject (the `2¹²⁸` high bit is constant, so the content
     determines the bytes). -/
 theorem blockToNat_inj (a b : List UInt8) (ha : a.length = 16) (hb : b.length = 16)
     (h : blockToNat ⟨a, ha⟩ = blockToNat ⟨b, hb⟩) : a = b := by
@@ -234,20 +234,20 @@ private theorem goInj (M : List UInt8) :
         rw [e1, e2] at hfin
         exact hfin
 
-/-- The numeric block engine is injective: distinct messages expand to distinct
+/-- **Supporting.** The numeric block engine is injective: distinct messages expand to distinct
     block-`Nat` lists. The high-bit padding makes block boundaries and the final
     length unambiguous. -/
 theorem toBlockNats_inj (M M' : List UInt8) (h : toBlockNats M = toBlockNats M') : M = M' :=
   goInj M M' h
 
-/-- **`toBlocks` is injective**: distinct messages expand to distinct typed block
+/-- **Capstone.** `toBlocks` is injective: distinct messages expand to distinct typed block
     structures, so the polynomial-hash collision bound lifts from block lists to
     messages. -/
 theorem toBlocks_inj (M M' : List UInt8) (h : toBlocks M = toBlocks M') : M = M' :=
   toBlockNats_inj M M' (by rw [← blockNats_toBlocks, ← blockNats_toBlocks]; exact congrArg blockNats h)
 
 open Polynomial in
-/-- **Message-level forgery bound (distinct messages).** With `toBlocks_inj`
+/-- **Capstone.** Message-level forgery bound (distinct messages). With `toBlocks_inj`
     closing the lift, the almost-universal bound holds for any two distinct
     messages `M ≠ M'`, not just distinct block expansions. -/
 theorem poly1305_almost_universal_msg' [Fact (Nat.Prime P)] (M M' : List UInt8)

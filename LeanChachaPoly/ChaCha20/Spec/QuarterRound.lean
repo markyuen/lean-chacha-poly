@@ -28,21 +28,26 @@ namespace ChaCha20.Spec
 
 open ChaCha20.Spec
 
-/-! ## Rotation lemmas -/
+/-! ## Rotation lemmas
 
-/-- rotl32 by n and then by (32-n) is identity. -/
+    The individual ARX steps are invertible (rotate-by-`n` is undone by
+    rotate-by-`32-n`, and rotation distributes over XOR). These document why the
+    quarter round is a permutation; an *algebraic* bijection proof built from them
+    (avoiding `bv_decide`) is noted as future work. -/
+
+/-- **Supporting.** `rotl32` by `n` then by `(32-n)` is the identity. -/
 theorem rotl32_inv (n : UInt32) (x : UInt32) (_hn : n.toNat < 32) :
     rotl32 (rotl32 x n) (32 - n) = x := by
   unfold rotl32; bv_decide
 
-/-- rotl32 distributes over XOR. -/
+/-- **Supporting.** `rotl32` distributes over XOR. -/
 theorem rotl32_xor (n : UInt32) (x y : UInt32) :
     rotl32 (x ^^^ y) n = (rotl32 x n) ^^^ (rotl32 y n) := by
   unfold rotl32; bv_decide
 
 /-! ## XOR cancellation -/
 
-/-- XOR with the same value twice is identity. -/
+/-- **Supporting.** XOR with the same value twice is the identity. -/
 @[simp]
 theorem xor_self_cancel (x y : UInt32) : (x ^^^ y) ^^^ y = x := by
   simp [UInt32.xor_assoc, UInt32.xor_self]

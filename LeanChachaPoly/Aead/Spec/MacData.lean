@@ -17,6 +17,7 @@ open ChaCha20.Spec Poly1305.Spec
     Two different (aad, ciphertext) pairs produce different macData
     inputs to Poly1305. This is important for security analysis,
     though not needed for the correctness roundtrip proof. -/
+/-- **Key lemma.** A fixed-ciphertext MAC collision forces the padded AAD to match. -/
 theorem macData_aad_inj (aad₁ aad₂ ct : List UInt8)
     (h : macData aad₁ ct = macData aad₂ ct) :
     (padTo16 aad₁).val = (padTo16 aad₂).val := by
@@ -30,6 +31,7 @@ theorem macData_aad_inj (aad₁ aad₂ ct : List UInt8)
   simp only [List.append_assoc] at hv
   exact List.append_inj_left hv hlen
 
+/-- **Key lemma.** A fixed-AAD MAC collision forces the padded ciphertext to match. -/
 theorem macData_ct_inj (aad ct₁ ct₂ : List UInt8)
     (h : macData aad ct₁ = macData aad ct₂) :
     (padTo16 ct₁).val = (padTo16 ct₂).val := by

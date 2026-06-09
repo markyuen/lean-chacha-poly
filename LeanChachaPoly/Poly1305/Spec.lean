@@ -18,9 +18,14 @@ polynomial evaluation in GF(2¹³⁰ - 5).
 
 ## Module structure
 
-  Poly1305.Spec            ← this file: types, definitions, capstones
-  Poly1305.Spec.Blocking   ← message-blocking properties
+  Poly1305.Spec            ← this file: types, definitions, basic properties
+  Poly1305.Spec.Sum        ← shared summation helper
+  Poly1305.Spec.Blocking   ← block-value bounds, toBlocks ↔ toBlockNats
   Poly1305.Spec.Accumulate ← accumulation = polynomial evaluation
+  Poly1305.Spec.Security   ← almost-universal / byte-level forgery bound
+  Poly1305.Spec.BlockInj   ← block-encoding injectivity → toBlocks injective
+  Poly1305.Spec.Tag        ← tag serialization round-trip / value
+  Poly1305.Spec.Clamp      ← clamp matches RFC §2.5.1
   Poly1305.Native          ← ByteArray bridge
 
 ## Typing convention
@@ -170,18 +175,23 @@ def poly1305 (key : Key) (msg : List UInt8) : Bytes 16 :=
 
 
 /-! ================================================================
-    CAPSTONE THEOREMS
+    BASIC PROPERTIES
+
+    Small facts about the definitions above. The headline Poly1305 results —
+    the byte-level forgery bound and tag-value exactness — are the *capstones*
+    and live in `Spec/Security.lean` and `Spec/Tag.lean`.
     ================================================================ -/
 
-/-! ### P1: Tag length — now enforced by the `Bytes 16` return type. -/
+/-- **Supporting.** Tag length (enforced by the `Bytes 16` return type). -/
 theorem poly1305_length (key : Key) (msg : List UInt8) :
     (poly1305 key msg).val.length = 16 := (poly1305 key msg).property
 
-/-! ### P2: accumulate stays in field -/
+/-- **Supporting.** One accumulation step lands in the field `[0, P)`. -/
 theorem step_lt_P (r acc block : Nat) : step r acc block < P := by
   simp only [step]
   exact Nat.mod_lt _ P_pos
 
+/-- **Key lemma.** The whole accumulation stays in the field `[0, P)`. -/
 theorem accumulate_lt_P (r : Nat) (blocks : List Nat) :
     accumulate r blocks < P := by
   unfold accumulate
@@ -194,14 +204,14 @@ theorem accumulate_lt_P (r : Nat) (blocks : List Nat) :
     simp only [List.foldl_cons]
     exact ih _ (step_lt_P r acc block)
 
-/-! ### Empty message tag -/
+/-- **Supporting.** The tag of the empty message is just `s mod 2¹²⁸`. -/
 theorem poly1305_empty (key : Key) :
     poly1305 key [] =
       natToLe16 (extractS key % 2^128) := by
   have h : toBlocks [] = ([], none) := by simp [toBlocks, toBlocks.go]
   simp [poly1305, h, blockNats, accumulate]
 
-/-! ### P5: Clamped r is bounded -/
+/-- **Supporting.** The clamped `r` fits in 128 bits. -/
 theorem clamp_lt (r : Nat) : clamp r < 2^128 := by
   unfold clamp
   exact Nat.lt_of_le_of_lt Nat.and_le_right (by decide)

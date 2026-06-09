@@ -7,16 +7,12 @@ import Mathlib
 `keystream_counter_shift`: the keystream at a shifted counter equals the tail of
 a longer keystream — i.e. ChaCha20 in counter mode is *seekable* / random-access.
 The counter indexes 64-byte blocks consistently.
-
-Declared in `ChaCha20.Spec` (so it keeps that qualified name) but proved here,
-since the list/arithmetic reasoning uses Mathlib — kept out of the Mathlib-free
-capstone chain.
 -/
 
 namespace ChaCha20.Spec
 
 set_option maxHeartbeats 2000000 in
-/-- The keystream from counter `ctr + offset` over `len` bytes is the tail
+/-- **Supporting.** The keystream from counter `ctr + offset` over `len` bytes is the tail
     (after `offset·64` bytes) of the keystream from `ctr` over `len + offset·64`
     bytes. Dropping `offset·64` bytes = skipping `offset` whole 64-byte blocks. -/
 theorem keystream_counter_shift (key : Key) (nonce : Nonce)

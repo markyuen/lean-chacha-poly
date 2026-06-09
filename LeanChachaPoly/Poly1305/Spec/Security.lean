@@ -13,11 +13,10 @@ top of the functional spec.
 The argument, in order:
 
 1. **Blocks are field elements** (`blockToNat_lt_P`, `finalBlockToNat_lt_P`):
-   every block produced by `toBlocks` is `< P = 2¹³⁰ − 5`, so it has a
-   well-defined image in `ZMod P`.
+   every block value is `< P = 2¹³⁰ − 5`, so it has a well-defined image in `ZMod P`.
 2. **Polynomial bridge** (`accumulate_cast_eq_eval`): the accumulation
-   `accumulate r (toBlocks msg)`, reduced mod `P`, equals the evaluation at
-   `r : ZMod P` of a polynomial whose coefficients are the message blocks.
+   `accumulate r B`, reduced mod `P`, equals the evaluation at `r : ZMod P` of a
+   polynomial whose coefficients are the message blocks `B`.
 3. **Forgery bound** (`poly1305_almost_universal`): two distinct messages
    collide under at most `deg` keys `r`, where `deg` is the block count — the
    roots of a nonzero difference polynomial over the field `ZMod P`.
@@ -43,14 +42,14 @@ private theorem geom_lt (L : Nat) :
         show (2 : Nat) ^ 8 = 256 from rfl]
     omega
 
-/-- A full block, with its `2¹²⁸` high bit, still fits in the field: `< P`. -/
+/-- **Supporting.** A full block, with its `2¹²⁸` high bit, still fits in the field: `< P`. -/
 theorem blockToNat_lt_P (block : Block) :
     blockToNat block < P := by
   have hlt := blockToNat_lt block
   have hP : (2 : Nat) ^ 129 < P := by unfold P; norm_num
   omega
 
-/-- The final (partial) block fits in the field: `< P`. Its value is the
+/-- **Supporting.** The final (partial) block fits in the field: `< P`. Its value is the
     little-endian sum of `L = block.length ≤ 16` bytes plus the high bit
     `2^(8L)`; the byte sum is `< 2^(8L)`, so the total is `< 2^(8L+1) ≤ 2¹²⁹ < P`. -/
 theorem finalBlockToNat_lt_P (block : FinalBlock) :
@@ -103,7 +102,7 @@ noncomputable def msgPoly (B : List Nat) : (ZMod P)[X] :=
   (B.reverse.zipIdx.map (fun p => C (p.1 : ZMod P) * X ^ (p.2 + 1))).sum
 
 open Polynomial in
-/-- Evaluating `msgPoly` distributes over the block list. -/
+/-- **Supporting.** Evaluating `msgPoly` distributes over the block list. -/
 theorem msgPoly_eval (B : List Nat) (r : Nat) :
     (msgPoly B).eval (r : ZMod P)
       = (B.reverse.zipIdx.map (fun p => (p.1 : ZMod P) * (r : ZMod P) ^ (p.2 + 1))).sum := by
@@ -117,8 +116,8 @@ theorem msgPoly_eval (B : List Nat) (r : Nat) :
   intro p _
   simp [Polynomial.eval_mul, Polynomial.eval_pow, Polynomial.eval_X]
 
-/-- **Bridge**: the Poly1305 accumulation, viewed in `ZMod P`, is the evaluation
-    of the message polynomial at the key `r`. -/
+/-- **Key lemma (bridge).** The Poly1305 accumulation, viewed in `ZMod P`, is the
+    evaluation of the message polynomial at the key `r`. -/
 theorem accumulate_cast_eq_eval (r : Nat) (B : List Nat) :
     ((accumulate r B : Nat) : ZMod P) = (msgPoly B).eval (r : ZMod P) := by
   rw [accumulate_eq_poly, msgPoly_eval, evalPoly, ZMod.natCast_mod, Nat.cast_list_sum,
@@ -156,7 +155,7 @@ private theorem zipIdx_aux {M : Type*} [AddCommMonoid M] (L : List Nat)
     · rw [Nat.zero_add]
 
 open Polynomial in
-/-- `msgPoly` as a `Finset.range` sum (the `zipIdx` reindexed). -/
+/-- **Supporting.** `msgPoly` as a `Finset.range` sum (the `zipIdx` reindexed). -/
 theorem msgPoly_eq_sum (B : List Nat) :
     msgPoly B = ∑ k ∈ Finset.range B.length, C (B.reverse.getD k 0 : ZMod P) * X ^ (k + 1) := by
   unfold msgPoly
@@ -203,7 +202,7 @@ theorem msgPoly_coeff_succ (B : List Nat) (k : Nat) (hk : k < B.length) :
   simp only [Nat.add_sub_cancel]
   rw [List.getD_eq_getElem _ _ (by rwa [List.length_reverse])]
 
-/-- `msgPoly B` has degree at most the block count. -/
+/-- **Supporting.** `msgPoly B` has degree at most the block count. -/
 theorem msgPoly_natDegree_le (B : List Nat) : (msgPoly B).natDegree ≤ B.length := by
   rw [Polynomial.natDegree_le_iff_coeff_eq_zero]
   intro m hm
@@ -244,8 +243,8 @@ private theorem coeff_top_ne (B B' : List Nat) (hpos : ∀ b ∈ B, 0 < b ∧ b 
   have hmem : B.reverse.getD (B.length - 1) 0 ∈ B := getD_reverse_mem B (B.length - 1) (by omega)
   exact cast_ne_zero_of_pos_lt (hpos _ hmem).1 (hpos _ hmem).2
 
-/-- **Distinct messages ⇒ distinct polynomials.** With field-element, nonzero
-    blocks, `B ≠ B'` forces `msgPoly B ≠ msgPoly B'`: either a length mismatch
+/-- **Key lemma.** Distinct messages ⇒ distinct polynomials. With field-element,
+    nonzero blocks, `B ≠ B'` forces `msgPoly B ≠ msgPoly B'`: either a length mismatch
     exposes a nonzero leading coefficient, or (same length) some block differs
     and the cast is injective. -/
 theorem msgPoly_ne (B B' : List Nat)
@@ -271,17 +270,17 @@ theorem msgPoly_ne (B B' : List Nat)
 
 /-! ## The forgery bound (almost-universal hashing)
 
-    The crown jewel. Over the prime field `ZMod P`, two distinct messages (as
-    field-element, nonzero block lists) collide under Poly1305 for at most
-    `max |B| |B'|` choices of the key component `r`. This is the
-    information-theoretic guarantee behind Poly1305's unforgeability: a value `r`
-    causing a collision is a root of the nonzero difference polynomial, and a
-    degree-`n` polynomial over a field has at most `n` roots.
-
     `ZMod P` is a field exactly when `P` is prime; `P = 2¹³⁰ − 5` is the Poly1305
     prime. Its 40-digit primality is taken as the hypothesis `[Fact P.Prime]`
     rather than discharged here (that needs a Pratt certificate). -/
+
 open Polynomial in
+/-- **Capstone.** Almost-universal hashing: over the prime field `ZMod P`, two
+    distinct messages (as field-element, nonzero block lists) collide under Poly1305
+    for at most `max |B| |B'|` choices of the key component `r`. The
+    information-theoretic core of Poly1305 unforgeability — a colliding `r` is a root
+    of the nonzero difference polynomial, and a degree-`n` polynomial over a field has
+    at most `n` roots. -/
 theorem poly1305_almost_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') :
@@ -310,15 +309,15 @@ theorem poly1305_almost_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     _ ≤ max (msgPoly B).natDegree (msgPoly B').natDegree := Polynomial.natDegree_sub_le _ _
     _ ≤ max B.length B'.length := max_le_max (msgPoly_natDegree_le B) (msgPoly_natDegree_le B')
 
-/-! ## Almost-Δ-universal (additive offset)
+/-! ## Almost-Δ-universal (additive offset) -/
 
-    The byte-level Poly1305 forgery bound rests on a *Δ-universal* property: the
-    forger must make `acc(M') − acc(M)` hit a specific value, not just collide.
-    Over the field this is the same root count, applied to `D = msgPoly B −
-    msgPoly B' − C c`. `D` stays nonzero for *any* constant `c` because the
-    polynomial difference has no constant term (every `msgPoly` monomial is
-    `X^(k+1)`), so it has degree ≥ 1 and subtracting a constant cannot zero it. -/
 open Polynomial in
+/-- **Key lemma.** The byte-level forgery bound rests on a *Δ-universal* property:
+    the forger must make `acc(M') − acc(M)` hit a specific value `c`, not just collide.
+    Over the field this is the same root count applied to `D = msgPoly B − msgPoly B'
+    − C c`; `D` stays nonzero for *any* constant `c` because the polynomial difference
+    has no constant term (every `msgPoly` monomial is `X^(k+1)`), so degree ≥ 1 and
+    subtracting a constant cannot zero it. -/
 theorem poly1305_almost_delta_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (c : ZMod P) :
@@ -361,13 +360,10 @@ theorem poly1305_almost_delta_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     _ ≤ max B.length B'.length := max_le_max (msgPoly_natDegree_le B) (msgPoly_natDegree_le B')
 
 open Polynomial in
-/-- **Union-bound reduction toward the byte-level forgery bound.** If the keys
-    causing a byte-level collision are covered by a finite set `cands` of
+/-- **Supporting.** Union-bound reduction toward the byte-level forgery bound: if the
+    keys causing a byte-level collision are covered by a finite set `cands` of
     field-offsets `c` (each collision realizing `eval B = eval B' + c`), then the
-    number of such keys is at most `|cands| · max #blocks`. Combined with the
-    arithmetic fact that an integer difference in `(−P, P)` congruent to a fixed
-    `Δ mod 2¹²⁸` takes at most 8 values, this yields the famous `8⌈L/16⌉` factor.
-    The `≤ 8` candidate count is the sole remaining arithmetic gap. -/
+    number of such keys is at most `|cands| · max #blocks`. -/
 theorem collision_union_bound [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (cands : Finset (ZMod P)) :
@@ -401,7 +397,7 @@ theorem collision_union_bound [Fact (Nat.Prime P)] (B B' : List Nat)
     `Δ mod 2¹²⁸` is one of the 8 candidates `Δ%2¹²⁸ + k·2¹²⁸` for `k ∈ [−4, 3]`
     — this is exactly what bounds `|cands| ≤ 8`. -/
 
-/-- Every integer in `(−P, P)` congruent to `Δ mod 2¹²⁸` is one of the 8
+/-- **Supporting.** Every integer in `(−P, P)` congruent to `Δ mod 2¹²⁸` is one of the 8
     candidates `Δ%2¹²⁸ + k·2¹²⁸`, `k ∈ [−4, 3]`. -/
 theorem candidate_cover (Δ d : ℤ) (h1 : -(P : ℤ) < d) (h2 : d < (P : ℤ))
     (h3 : d % 2 ^ 128 = Δ % 2 ^ 128) :
@@ -413,29 +409,29 @@ theorem candidate_cover (Δ d : ℤ) (h1 : -(P : ℤ) < d) (h2 : d < (P : ℤ))
   · rw [Finset.mem_Icc]; omega
   · omega
 
-/-- The candidate set has at most 8 elements — the `8` of the `8⌈L/16⌉` bound. -/
+/-- **Supporting.** The candidate set has at most 8 elements — the `8` of the `8⌈L/16⌉` bound. -/
 theorem candidate_card (Δ : ℤ) :
     ((Finset.Icc (-4 : ℤ) 3).image (fun k => Δ % 2 ^ 128 + k * 2 ^ 128)).card ≤ 8 :=
   le_trans Finset.card_image_le (by decide)
 
-/-- The canonical representative `((msgPoly B).eval r).val` of the field
-    evaluation *is* the spec accumulator `accumulate r B` (both lie in `[0, P)`),
+/-- **Key lemma.** The canonical representative `((msgPoly B).eval r).val` of the
+    field evaluation *is* the spec accumulator `accumulate r B` (both lie in `[0, P)`),
     so the byte-level bound below is about the real Poly1305 accumulator. -/
 theorem accumulate_eq_eval_val (r : Nat) (B : List Nat) :
     accumulate r B = ((msgPoly B).eval (r : ZMod P)).val := by
   haveI : NeZero P := ⟨P_pos.ne'⟩
   rw [← accumulate_cast_eq_eval, ZMod.val_natCast_of_lt (accumulate_lt_P r B)]
 
-/-! ## The byte-level forgery bound
+/-! ## The byte-level forgery bound -/
 
-    Assembling everything. The accumulator for message `B` at key `r` is the
-    canonical representative `((msgPoly B).eval r).val ∈ [0, P)`. The real
-    Poly1305 tag difference is `(acc(B) − acc(B')) mod 2¹²⁸` (the one-time pad
-    `s` cancels), so a forger targeting a fixed offset `Δ mod 2¹²⁸` succeeds for
-    at most `8 · max #blocks` keys: each such key realizes one of the ≤ 8
-    field-offsets `c` (`candidate_cover`), and each offset is hit by at most
-    `max #blocks` keys (the Δ-universal root count via `collision_union_bound`). -/
 open Polynomial in
+/-- **Capstone.** The real byte-level Poly1305 forgery bound — the `8⌈L/16⌉` factor.
+    The accumulator for `B` at key `r` is the canonical representative
+    `((msgPoly B).eval r).val ∈ [0, P)`; the real tag difference is
+    `(acc(B) − acc(B')) mod 2¹²⁸` (the one-time pad `s` cancels). A forger targeting
+    a fixed offset `Δ mod 2¹²⁸` succeeds for at most `8 · max #blocks` keys: each key
+    realizes one of the ≤ 8 field-offsets `c` (`candidate_cover`), and each offset is
+    hit by at most `max #blocks` keys (the Δ-universal root count). -/
 theorem poly1305_byte_forgery [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (Δ : ℤ) :
@@ -498,13 +494,13 @@ private theorem goPos (bs : List UInt8) : ∀ b ∈ toBlockNats.go bs, 0 < b ∧
       positivity
     omega
 
-/-- Every `toBlockNats` block is a nonzero field element (`0 < b < P`). -/
+/-- **Supporting.** Every `toBlockNats` block is a nonzero field element (`0 < b < P`). -/
 theorem toBlockNats_pos (msg : List UInt8) : ∀ b ∈ toBlockNats msg, 0 < b ∧ b < P := by
   unfold toBlockNats; exact goPos msg
 
 open Polynomial in
-/-- **Message-level forgery bound.** For two messages whose block expansions
-    differ, the Poly1305 polynomials collide for at most `max #blocks` keys
+/-- **Capstone.** Message-level forgery bound: for two messages whose block
+    expansions differ, the Poly1305 polynomials collide for at most `max #blocks` keys
     `r : ZMod P`. (Lifting the `blockNats (toBlocks M) ≠ blockNats (toBlocks M')`
     hypothesis to `M ≠ M'` is `toBlocks_inj`, in `BlockInj`.) -/
 theorem poly1305_almost_universal_msg [Fact (Nat.Prime P)] (M M' : List UInt8)

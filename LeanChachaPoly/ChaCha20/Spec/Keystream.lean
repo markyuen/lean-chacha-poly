@@ -8,9 +8,9 @@ Properties of `keystream`, particularly its length.
 
 ## Role in the proof chain
 
-`keystream_length` is the critical lemma that lets us satisfy
-the length precondition of `xorBytes_self_cancel` in the
-involution proof.
+`keystream_length` is the lemma that lets `chacha20_involutive`
+(in `ChaCha20.Capstones`) satisfy the equal-length precondition
+of `xorBytes_involutive`.
 
 The proof reduces to:
   - We generate ⌈len/64⌉ blocks of 64 bytes each
@@ -26,7 +26,7 @@ namespace ChaCha20.Spec
 
 /-! ## Block list length -/
 
-/-- Generating n blocks and serializing each gives n×64 bytes. -/
+/-- **Supporting.** Generating n blocks and serializing each gives n×64 bytes. -/
 theorem blockStream_length (key : Key) (nonce : Nonce)
     (counter : UInt32) (n : Nat) :
     ((List.range n).flatMap fun i =>
@@ -42,7 +42,7 @@ theorem blockStream_length (key : Key) (nonce : Nonce)
 
 /-! ## Keystream length -/
 
-/-- The keystream is exactly as long as requested. -/
+/-- **Key lemma.** The keystream is exactly as long as requested. -/
 theorem keystream_length (key : Key) (nonce : Nonce)
     (counter : UInt32) (len : Nat) :
     (keystream key nonce counter len).length = len := by

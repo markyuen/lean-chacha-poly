@@ -36,14 +36,15 @@ def keystream (key : Key) (nonce : Nonce) (counter : UInt32) (len : Nat) : ByteA
 
 /-! ## Bridge theorems -/
 
-/-- Native encrypt equals spec encrypt on toList. -/
+/-- **Capstone (bridge).** The native ByteArray cipher equals the `List UInt8` spec,
+    so every spec theorem transfers to the executable implementation. -/
 theorem chacha20_eq_spec (key : Key) (nonce : Nonce) (counter : UInt32)
     (msg : ByteArray) :
     (chacha20 key nonce counter msg).data.toList =
     Spec.chacha20 key nonce counter msg.data.toList := by
   simp [chacha20]
 
-/-- Native encrypt output length equals input length. -/
+/-- **Supporting.** Native encrypt output length equals input length. -/
 theorem chacha20_size (key : Key) (nonce : Nonce) (counter : UInt32)
     (msg : ByteArray) :
     (chacha20 key nonce counter msg).size = msg.size := by
@@ -51,9 +52,9 @@ theorem chacha20_size (key : Key) (nonce : Nonce) (counter : UInt32)
   rw [← Array.length_toList, ← Array.length_toList, chacha20_eq_spec,
       Spec.chacha20_length]
 
-/-! ## Derived capstone theorems -/
+/-! ## Derived capstones -/
 
-/-- The involution holds for ByteArray too. -/
+/-- **Capstone.** The involution holds for the ByteArray implementation too. -/
 theorem chacha20_involutive (key : Key) (nonce : Nonce)
     (counter : UInt32) (msg : ByteArray) :
     chacha20 key nonce counter (chacha20 key nonce counter msg) = msg := by

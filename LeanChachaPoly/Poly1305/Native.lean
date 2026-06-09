@@ -16,6 +16,7 @@ def poly1305 (key : Key) (msg : ByteArray) : ByteArray :=
 
 /-! ## Bridge theorem -/
 
+/-- **Capstone (bridge).** The native ByteArray MAC equals the `List UInt8` spec tag. -/
 theorem poly1305_eq_spec (key : Key) (msg : ByteArray) :
     (poly1305 key msg).data.toList =
       (Spec.poly1305 key msg.data.toList).val := by
@@ -23,6 +24,7 @@ theorem poly1305_eq_spec (key : Key) (msg : ByteArray) :
 
 /-! ## Derived properties -/
 
+/-- **Supporting.** The native tag is 16 bytes. -/
 theorem poly1305_size (key : Key) (msg : ByteArray) :
     (poly1305 key msg).size = 16 := by
   simp [poly1305, ByteArray.size, Spec.poly1305_length]

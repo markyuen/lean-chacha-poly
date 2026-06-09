@@ -104,4 +104,43 @@ theorem macData_ct_binding (aad ct₁ ct₂ : List UInt8)
     macData aad ct₁ ≠ macData aad ct₂ :=
   fun h => hne (macData_ct_eq aad ct₁ ct₂ h1 h2 h)
 
+/-! ## Full MAC-input injectivity -/
+
+/-- `padTo16` length depends only on the input length. -/
+private theorem padTo16_length_eq {a b : List UInt8} (hl : a.length = b.length) :
+    (padTo16 a).length = (padTo16 b).length := by
+  simp only [padTo16]
+  rw [hl]
+  split
+  · exact hl
+  · simp only [List.length_append, List.length_replicate]; omega
+
+/-- **The MAC input determines both the AAD and the ciphertext.** Distinct
+    `(aad, ct)` pairs always produce distinct Poly1305 inputs — the full
+    structural authenticity guarantee `macData` provides. -/
+theorem macData_inj (aad₁ ct₁ aad₂ ct₂ : List UInt8)
+    (ha1 : aad₁.length < 2 ^ 64) (hc1 : ct₁.length < 2 ^ 64)
+    (ha2 : aad₂.length < 2 ^ 64) (hc2 : ct₂.length < 2 ^ 64)
+    (h : macData aad₁ ct₁ = macData aad₂ ct₂) : aad₁ = aad₂ ∧ ct₁ = ct₂ := by
+  have htot := congrArg List.length h
+  rw [macData_length, macData_length] at htot
+  rw [macData, macData] at h
+  -- peel the rightmost `le64 |ct|` (length 8) — recovers the ciphertext length
+  obtain ⟨hA, hct64⟩ := List.append_inj h (by
+    simp only [List.length_append, le64_length]; omega)
+  have hctlen : ct₁.length = ct₂.length := le64_inj _ _ hc1 hc2 hct64
+  -- peel the next `le64 |aad|` (length 8) — recovers the AAD length
+  obtain ⟨hB, haad64⟩ := List.append_inj hA (by
+    simp only [List.length_append]; omega)
+  have haadlen : aad₁.length = aad₂.length := le64_inj _ _ ha1 ha2 haad64
+  -- now split `padTo16 aad ++ padTo16 ct` using the recovered AAD length
+  obtain ⟨hpadA, hpadC⟩ := List.append_inj hB (padTo16_length_eq haadlen)
+  refine ⟨?_, ?_⟩
+  · calc aad₁ = (padTo16 aad₁).take aad₁.length := (padTo16_prefix aad₁).symm
+      _ = (padTo16 aad₂).take aad₂.length := by rw [hpadA, haadlen]
+      _ = aad₂ := padTo16_prefix aad₂
+  · calc ct₁ = (padTo16 ct₁).take ct₁.length := (padTo16_prefix ct₁).symm
+      _ = (padTo16 ct₂).take ct₂.length := by rw [hpadC, hctlen]
+      _ = ct₂ := padTo16_prefix ct₂
+
 end Aead.Spec

@@ -48,7 +48,7 @@ theorem blockToNat_lt (block : List UInt8) (h : block.length = 16) :
         have := (block.get (i.cast h.symm)).toNat_lt; omega
       exact Nat.mul_le_mul_right _ hb
     have hconst : (List.map (fun i : Fin 16 => 255 * 2 ^ (i.val * 8)) (List.finRange 16)).sum
-        < 2 ^ 128 := by native_decide
+        < 2 ^ 128 := by decide
     omega
   unfold blockToNat; omega
 

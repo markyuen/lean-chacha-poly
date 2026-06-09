@@ -29,7 +29,7 @@ namespace Poly1305.Spec
 /-- 2¹³⁰ - 5. The largest prime below 2¹³⁰. -/
 def P : Nat := 2^130 - 5
 
-theorem P_pos : 0 < P := by native_decide
+theorem P_pos : 0 < P := by decide
 
 /-! ## Key structure (RFC 8439 §2.5.1) -/
 
@@ -142,8 +142,8 @@ theorem poly1305_length (key : Key) (msg : List UInt8) :
 
 /-! ### P2: accumulate stays in field -/
 theorem step_lt_P (r acc block : Nat) : step r acc block < P := by
-  simp [step, P]
-  exact Nat.mod_lt _ (by native_decide)
+  simp only [step]
+  exact Nat.mod_lt _ P_pos
 
 theorem accumulate_lt_P (r : Nat) (blocks : List Nat) :
     accumulate r blocks < P := by
@@ -167,12 +167,12 @@ theorem accumulate_append (r : Nat) (xs ys : List Nat) :
 theorem poly1305_empty (key : Key) :
     poly1305 key [] =
       natToLe16 (extractS key % 2^128) := by
-  have h : toBlocks [] = [] := by native_decide
+  have h : toBlocks [] = [] := by simp [toBlocks, toBlocks.go]
   simp [poly1305, h, accumulate]
 
 /-! ### P5: Clamped r is bounded -/
 theorem clamp_lt (r : Nat) : clamp r < 2^128 := by
   unfold clamp
-  exact Nat.lt_of_le_of_lt Nat.and_le_right (by native_decide)
+  exact Nat.lt_of_le_of_lt Nat.and_le_right (by decide)
 
 end Poly1305.Spec

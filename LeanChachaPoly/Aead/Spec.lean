@@ -28,9 +28,11 @@ content beyond what was proved in ChaCha20.Spec and Poly1305.Spec.
 
 ## Module structure
 
-  Aead.Spec               ← this file: construction + capstone
-  Aead.Spec.KeyDerivation ← derivePolyKey correctness
-  Aead.Spec.MacData       ← macData construction properties
+  Aead.Spec               ← this file: construction (encrypt/decrypt) only
+  Aead.Correctness        ← roundtrip + length/shape capstones
+  Aead.Security           ← authenticity: verify-before-decrypt, macData injectivity
+  Aead.Spec.KeyDerivation ← derivePolyKey, padTo16/le64 lemmas
+  Aead.Spec.MacData       ← macData injectivity lemmas
   Aead.Native             ← ByteArray bridge
 -/
 namespace Aead.Spec
@@ -104,8 +106,8 @@ def decrypt (key : Key) (nonce : Nonce)
 
 /-!
 This file is construction only. The properties live elsewhere:
-- functional roundtrip / length facts — `Aead.Capstones` (`decrypt_encrypt`, …)
-- authenticity — `Aead/Spec/Security.lean` (`decrypt_verifies`, `macData_inj`, bindings)
+- functional roundtrip / length facts — `Aead.Correctness` (`decrypt_encrypt`, …)
+- authenticity — `Aead/Security.lean` (`decrypt_verifies`, `macData_inj`, bindings)
 - `macData`/`padTo16`/`le64` structural lemmas — `Aead/Spec/{KeyDerivation,MacData}.lean`
 -/
 

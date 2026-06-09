@@ -19,14 +19,15 @@ polynomial evaluation in GF(2¹³⁰ - 5).
 ## Module structure
 
   Poly1305.Spec            ← this file: types, definitions, basic properties
+  Poly1305.Security        ← almost-universal / byte-level forgery bound  (capstone)
+  Poly1305.Injectivity     ← block-encoding injectivity → toBlocks injective  (capstone)
+  Poly1305.Native          ← ByteArray bridge
+  ── supporting (Poly1305.Spec.*) ──
   Poly1305.Spec.Sum        ← shared summation helper
   Poly1305.Spec.Blocking   ← block-value bounds, toBlocks ↔ toBlockNats
-  Poly1305.Spec.Accumulate ← accumulation = polynomial evaluation
-  Poly1305.Spec.Security   ← almost-universal / byte-level forgery bound
-  Poly1305.Spec.BlockInj   ← block-encoding injectivity → toBlocks injective
+  Poly1305.Spec.Accumulate ← accumulation = polynomial evaluation  (key lemma)
   Poly1305.Spec.Tag        ← tag serialization round-trip / value
   Poly1305.Spec.Clamp      ← clamp matches RFC §2.5.1
-  Poly1305.Native          ← ByteArray bridge
 
 ## Typing convention
 

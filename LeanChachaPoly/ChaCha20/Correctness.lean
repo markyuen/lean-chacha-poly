@@ -2,7 +2,7 @@ import LeanChachaPoly.ChaCha20.Spec.Keystream
 import LeanChachaPoly.ChaCha20.Spec.Xor
 
 /-!
-# ChaCha20 Capstones
+# ChaCha20 Correctness
 
 The two top-level correctness guarantees for the stream cipher, assembled from the
 keystream-length and XOR-cancellation lemmas:

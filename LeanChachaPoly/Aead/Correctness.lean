@@ -1,8 +1,8 @@
 import LeanChachaPoly.Aead.Spec
-import LeanChachaPoly.ChaCha20.Capstones
+import LeanChachaPoly.ChaCha20.Correctness
 
 /-!
-# AEAD Capstones
+# AEAD Correctness
 
 The top-level functional guarantees of the AEAD construction, assembled from the
 ChaCha20 involution and the Poly1305 tag length:
@@ -11,7 +11,7 @@ ChaCha20 involution and the Poly1305 tag length:
 - `encrypt_length`, `decrypt_short`, `encrypt_ct_indep_of_aad` — supporting shape facts.
 
 The *authenticity* capstones (`decrypt_verifies`, `macData_inj`) live in
-`Aead/Spec/Security.lean`.
+`Aead/Security.lean`.
 -/
 
 namespace Aead.Spec

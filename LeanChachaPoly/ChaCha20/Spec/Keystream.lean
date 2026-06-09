@@ -9,7 +9,7 @@ Properties of `keystream`, particularly its length.
 ## Role in the proof chain
 
 `keystream_length` is the lemma that lets `chacha20_involutive`
-(in `ChaCha20.Capstones`) satisfy the equal-length precondition
+(in `ChaCha20.Correctness`) satisfy the equal-length precondition
 of `xorBytes_involutive`.
 
 The proof reduces to:
@@ -52,7 +52,7 @@ theorem keystream_length (key : Key) (nonce : Nonce)
   omega
 
 /-! `keystream_length` feeds the `chacha20_length` / `chacha20_involutive` capstones in
-    `ChaCha20.Capstones`; CTR seekability (`keystream_counter_shift`) is in
+    `ChaCha20.Correctness`; CTR seekability (`keystream_counter_shift`) is in
     `ChaCha20.Spec.Seek`. -/
 
 end ChaCha20.Spec

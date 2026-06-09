@@ -1,7 +1,7 @@
 import LeanChachaPoly.Poly1305.Spec
 import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
-import LeanChachaPoly.Poly1305.Spec.Security
+import LeanChachaPoly.Poly1305.Security
 import Mathlib
 
 /-!

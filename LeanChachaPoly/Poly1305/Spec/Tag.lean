@@ -82,7 +82,7 @@ theorem leToNat16_natToLe16 (x : Nat) (hx : x < 2 ^ 128) :
         rw [show (256 : Nat) = 2 ^ 8 from rfl, ← pow_mul, Nat.mul_comm]])]
   exact digitSum 256 (by norm_num) 16 x (by rw [show (256 : Nat) = 2 ^ 8 from rfl, ← pow_mul]; exact hx)
 
-/-- **Capstone.** The tag is fully reduced: reading the 16-byte Poly1305 output back as a
+/-- **Key lemma.** The tag is fully reduced: reading the 16-byte Poly1305 output back as a
     number gives exactly `(accumulate r blocks + s) mod 2¹²⁸` — the serialization
     loses nothing, so the tag is the true reduced value rather than a truncation. -/
 theorem poly1305_value (key : Key) (msg : List UInt8) :

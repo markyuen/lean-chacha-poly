@@ -492,7 +492,7 @@ theorem toBlockNats_pos (msg : List UInt8) : ∀ b ∈ toBlockNats msg, 0 < b �
 /-- **Capstone.** Message-level forgery bound: for two messages whose block
     expansions differ, the Poly1305 polynomials collide for at most `max #blocks` keys
     `r : ZMod P`. (Lifting the `blockNats (toBlocks M) ≠ blockNats (toBlocks M')`
-    hypothesis to `M ≠ M'` is `toBlocks_inj`, in `BlockInj`.) -/
+    hypothesis to `M ≠ M'` is `toBlocks_inj`, in `Injectivity`.) -/
 theorem poly1305_almost_universal_msg [Fact (Nat.Prime P)] (M M' : List UInt8)
     (hne : blockNats (toBlocks M) ≠ blockNats (toBlocks M')) :
     (Finset.univ.filter (fun r : ZMod P =>

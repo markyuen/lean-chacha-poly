@@ -21,7 +21,7 @@ with the message.
 ## Module structure
 
   ChaCha20.Spec               ← this file: types and definitions
-  ChaCha20.Capstones          ← chacha20_length / chacha20_involutive
+  ChaCha20.Correctness          ← chacha20_length / chacha20_involutive
   ChaCha20.Spec.QuarterRound  ← rotation/XOR lemmas, RFC test vector
   ChaCha20.Spec.Keystream     ← keystream length
   ChaCha20.Spec.Seek          ← CTR seekability
@@ -172,7 +172,7 @@ def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
 
 /-!
 This file is definitions only. The properties live alongside them:
-- `chacha20_involutive` / `chacha20_length` — `ChaCha20.Capstones`
+- `chacha20_involutive` / `chacha20_length` — `ChaCha20.Correctness`
 - `quarterRound_bijective` — `Spec.Permutation`
 - keystream length / CTR seekability — `Spec.Keystream` / `Spec.Seek`
 State size (`= 16`) is enforced by the `State = Words 16` type, so no size theorems

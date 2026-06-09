@@ -82,6 +82,6 @@ theorem chacha20_involutive (key : Key) (nonce : Nonce)
       = msg.length := by rw [xorBytes_length, hks, Nat.min_self]
   simp only [chacha20]
   rw [hxlen]
-  exact xorBytes_self_cancel msg (keystream key nonce counter msg.length) hks.symm
+  exact xorBytes_involutive msg (keystream key nonce counter msg.length) hks.symm
 
 end ChaCha20.Spec

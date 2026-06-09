@@ -58,7 +58,7 @@ theorem macData_length (aad ct : List UInt8) :
 
 /-- When `ct` has length `n`, the last 16 bytes of `ct ++ tag` are `tag`,
     given `tag.length = 16`. -/
-theorem drop_ct_eq_tag (ct tag : List UInt8) (htag : tag.length = 16) :
+theorem drop_ct_eq_tag (ct tag : List UInt8) (_ : tag.length = 16) :
     (ct ++ tag).drop ct.length = tag := by
   rw [List.drop_append_of_le_length (Nat.le_refl _), List.drop_length,
       List.nil_append]

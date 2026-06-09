@@ -68,7 +68,7 @@ theorem xorBytes_length_eq (xs ys : List UInt8) (h : xs.length = ys.length) :
 
     This is the direct mathematical basis of the involution theorem.
     Proof: pointwise application of `UInt8.xor_cancel`. -/
-theorem xorBytes_self_cancel (msg ks : List UInt8) (h : msg.length = ks.length) :
+theorem xorBytes_involutive (msg ks : List UInt8) (h : msg.length = ks.length) :
     xorBytes (xorBytes msg ks) ks = msg := by
   induction msg generalizing ks with
   | nil => simp [xorBytes]
@@ -80,10 +80,5 @@ theorem xorBytes_self_cancel (msg ks : List UInt8) (h : msg.length = ks.length) 
       simp only [List.zipWith_cons_cons, UInt8.xor_cancel]
       unfold xorBytes at ih
       exact congrArg (x :: ·) (ih ks (by simpa using h))
-
-/-- Variant: xorBytes with equal-length lists composed with itself. -/
-theorem xorBytes_involutive (msg ks : List UInt8) (h : msg.length = ks.length) :
-    xorBytes (xorBytes msg ks) ks = msg :=
-  xorBytes_self_cancel msg ks h
 
 end ChaCha20.Spec

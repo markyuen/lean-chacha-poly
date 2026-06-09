@@ -44,6 +44,6 @@ theorem keystream_counter_shift (key : Key) (nonce : Nonce)
         (fun i => serializeBlock (chacha20Block key nonce (ctr + UInt32.ofNat i)))).length
       from hAlen.symm,
     List.drop_take]
-  simp [List.drop_left, Nat.add_sub_cancel_left]
+  simp
 
 end ChaCha20.Spec

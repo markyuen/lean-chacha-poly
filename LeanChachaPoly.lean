@@ -1,3 +1,4 @@
+import LeanChachaPoly.Subtypes
 import LeanChachaPoly.ChaCha20.Spec
 import LeanChachaPoly.ChaCha20.Spec.QuarterRound
 import LeanChachaPoly.ChaCha20.Spec.Block

@@ -317,6 +317,56 @@ theorem poly1305_almost_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     _ ≤ max (msgPoly B).natDegree (msgPoly B').natDegree := Polynomial.natDegree_sub_le _ _
     _ ≤ max B.length B'.length := max_le_max (msgPoly_natDegree_le B) (msgPoly_natDegree_le B')
 
+/-! ## Almost-Δ-universal (additive offset)
+
+    The byte-level Poly1305 forgery bound rests on a *Δ-universal* property: the
+    forger must make `acc(M') − acc(M)` hit a specific value, not just collide.
+    Over the field this is the same root count, applied to `D = msgPoly B −
+    msgPoly B' − C c`. `D` stays nonzero for *any* constant `c` because the
+    polynomial difference has no constant term (every `msgPoly` monomial is
+    `X^(k+1)`), so it has degree ≥ 1 and subtracting a constant cannot zero it. -/
+open Polynomial in
+theorem poly1305_almost_delta_universal [Fact (Nat.Prime P)] (B B' : List Nat)
+    (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
+    (hne : B ≠ B') (c : ZMod P) :
+    (Finset.univ.filter (fun r : ZMod P =>
+      (msgPoly B).eval r = (msgPoly B').eval r + c)).card
+      ≤ max B.length B'.length := by
+  classical
+  haveI : NeZero P := ⟨P_pos.ne'⟩
+  set E := msgPoly B - msgPoly B' with hE
+  have hEne : E ≠ 0 := sub_ne_zero.mpr (msgPoly_ne B B' hpos hpos' hne)
+  have hE0 : E.coeff 0 = 0 := by rw [hE, Polynomial.coeff_sub]; simp [msgPoly_coeff]
+  set D := E - Polynomial.C c with hD
+  have hDne : D ≠ 0 := by
+    have hex : ∃ d, E.coeff d ≠ 0 := by
+      by_contra hc
+      simp only [not_exists, not_not] at hc
+      exact hEne (Polynomial.ext (fun n => by rw [hc n, Polynomial.coeff_zero]))
+    obtain ⟨d, hd⟩ := hex
+    have hd0 : d ≠ 0 := by rintro rfl; exact hd hE0
+    intro hzero
+    apply hd
+    have : D.coeff d = 0 := by rw [hzero, Polynomial.coeff_zero]
+    rwa [hD, Polynomial.coeff_sub, Polynomial.coeff_C, if_neg hd0, sub_zero] at this
+  have hsub : (Finset.univ.filter (fun r : ZMod P =>
+      (msgPoly B).eval r = (msgPoly B').eval r + c)) ⊆ D.roots.toFinset := by
+    intro r hr
+    rw [Finset.mem_filter] at hr
+    rw [Multiset.mem_toFinset, Polynomial.mem_roots hDne]
+    show D.eval r = 0
+    rw [hD, hE, Polynomial.eval_sub, Polynomial.eval_sub, Polynomial.eval_C, hr.2]
+    ring
+  calc (Finset.univ.filter (fun r : ZMod P =>
+        (msgPoly B).eval r = (msgPoly B').eval r + c)).card
+      ≤ D.roots.toFinset.card := Finset.card_le_card hsub
+    _ ≤ Multiset.card D.roots := Multiset.toFinset_card_le _
+    _ ≤ D.natDegree := Polynomial.card_roots' D
+    _ ≤ max E.natDegree (Polynomial.C c).natDegree := by rw [hD]; exact Polynomial.natDegree_sub_le _ _
+    _ = E.natDegree := by rw [Polynomial.natDegree_C]; exact max_eq_left (Nat.zero_le _)
+    _ ≤ max (msgPoly B).natDegree (msgPoly B').natDegree := by rw [hE]; exact Polynomial.natDegree_sub_le _ _
+    _ ≤ max B.length B'.length := max_le_max (msgPoly_natDegree_le B) (msgPoly_natDegree_le B')
+
 /-! ## Lifting the bound to messages
 
     `toBlocks` outputs exactly the field-element, nonzero blocks the bound needs,

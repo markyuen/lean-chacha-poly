@@ -425,6 +425,56 @@ theorem candidate_card (Δ : ℤ) :
     ((Finset.Icc (-4 : ℤ) 3).image (fun k => Δ % 2 ^ 128 + k * 2 ^ 128)).card ≤ 8 :=
   le_trans Finset.card_image_le (by decide)
 
+/-- The canonical representative `((msgPoly B).eval r).val` of the field
+    evaluation *is* the spec accumulator `accumulate r B` (both lie in `[0, P)`),
+    so the byte-level bound below is about the real Poly1305 accumulator. -/
+theorem accumulate_eq_eval_val (r : Nat) (B : List Nat) :
+    accumulate r B = ((msgPoly B).eval (r : ZMod P)).val := by
+  haveI : NeZero P := ⟨P_pos.ne'⟩
+  rw [← accumulate_cast_eq_eval, ZMod.val_natCast_of_lt (accumulate_lt_P r B)]
+
+/-! ## The byte-level forgery bound
+
+    Assembling everything. The accumulator for message `B` at key `r` is the
+    canonical representative `((msgPoly B).eval r).val ∈ [0, P)`. The real
+    Poly1305 tag difference is `(acc(B) − acc(B')) mod 2¹²⁸` (the one-time pad
+    `s` cancels), so a forger targeting a fixed offset `Δ mod 2¹²⁸` succeeds for
+    at most `8 · max #blocks` keys: each such key realizes one of the ≤ 8
+    field-offsets `c` (`candidate_cover`), and each offset is hit by at most
+    `max #blocks` keys (the Δ-universal root count via `collision_union_bound`). -/
+open Polynomial in
+theorem poly1305_byte_forgery [Fact (Nat.Prime P)] (B B' : List Nat)
+    (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
+    (hne : B ≠ B') (Δ : ℤ) :
+    (Finset.univ.filter (fun r : ZMod P =>
+      (((msgPoly B).eval r).val : ℤ) - ((msgPoly B').eval r).val ≡ Δ [ZMOD 2 ^ 128])).card
+      ≤ 8 * max B.length B'.length := by
+  classical
+  haveI : NeZero P := ⟨P_pos.ne'⟩
+  set cands : Finset (ZMod P) :=
+    ((Finset.Icc (-4 : ℤ) 3).image (fun k => Δ % 2 ^ 128 + k * 2 ^ 128)).image
+      (fun d : ℤ => (d : ZMod P)) with hcands
+  have hcard : cands.card ≤ 8 := le_trans Finset.card_image_le (candidate_card Δ)
+  have hcov : (Finset.univ.filter (fun r : ZMod P =>
+      (((msgPoly B).eval r).val : ℤ) - ((msgPoly B').eval r).val ≡ Δ [ZMOD 2 ^ 128]))
+      ⊆ Finset.univ.filter (fun r : ZMod P =>
+          ∃ c ∈ cands, (msgPoly B).eval r = (msgPoly B').eval r + c) := by
+    intro r hr
+    rw [Finset.mem_filter] at hr ⊢
+    refine ⟨hr.1, ?_⟩
+    have hav : ((msgPoly B).eval r).val < P := ZMod.val_lt _
+    have hav' : ((msgPoly B').eval r).val < P := ZMod.val_lt _
+    set e : ℤ := (((msgPoly B).eval r).val : ℤ) - ((msgPoly B').eval r).val with he
+    have hmem := candidate_cover Δ e (by simp only [he]; omega) (by simp only [he]; omega) hr.2
+    refine ⟨(e : ZMod P), ?_, ?_⟩
+    · rw [hcands, Finset.mem_image]; exact ⟨e, hmem, rfl⟩
+    · rw [he]; push_cast; rw [ZMod.natCast_zmod_val, ZMod.natCast_zmod_val]; ring
+  calc (Finset.univ.filter (fun r : ZMod P =>
+        (((msgPoly B).eval r).val : ℤ) - ((msgPoly B').eval r).val ≡ Δ [ZMOD 2 ^ 128])).card
+      ≤ _ := Finset.card_le_card hcov
+    _ ≤ cands.card * max B.length B'.length := collision_union_bound B B' hpos hpos' hne cands
+    _ ≤ 8 * max B.length B'.length := Nat.mul_le_mul_right _ hcard
+
 /-! ## Lifting the bound to messages
 
     `toBlocks` outputs exactly the field-element, nonzero blocks the bound needs,

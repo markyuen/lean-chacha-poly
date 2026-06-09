@@ -97,7 +97,7 @@ def runTests : IO Unit := do
   group "TestChaCha20Poly1305Poly1305KeyGen" do
     let mut results := #[]
     for tv in kgTvs do
-      results := results.push (← check tv.name tv.expected (derivePolyKey tv.key tv.nonce).bytes)
+      results := results.push (← check tv.name tv.expected (derivePolyKey tv.key tv.nonce).val)
     return results.toList
 
   group "TestChaCha20Poly1305Encrypt" do

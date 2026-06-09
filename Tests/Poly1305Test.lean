@@ -106,7 +106,7 @@ def runTests : IO Unit := do
   group "TestPoly1305GenerateTag" do
     let mut results := #[]
     for tv in tvs do
-      results := results.push (← check tv.name tv.tag (poly1305 tv.key tv.msg))
+      results := results.push (← check tv.name tv.tag (poly1305 tv.key tv.msg).val)
     return results.toList
   IO.println ""
 

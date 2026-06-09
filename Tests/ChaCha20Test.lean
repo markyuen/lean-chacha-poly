@@ -22,13 +22,13 @@ def qr_2_1_1 : Bool :=
     == (0xea2a92f4, 0xcb1cf8ce, 0x4581472e, 0x5881c4bb)
 
 -- §2.2.1 — quarter round on state positions (2, 7, 8, 13).
-def qr_2_2_1_state : State := #[
+def qr_2_2_1_state : Array UInt32 := #[
   0x879531e0, 0xc5ecf37d, 0x516461b1, 0xc9a62f8a,
   0x44c20ef3, 0x3390af7f, 0xd9fc690b, 0x2a5f714c,
   0x53372767, 0xb00a5631, 0x974c541a, 0x359e9963,
   0x5c971061, 0x3d631689, 0x2098d9d6, 0x91dbd320]
 
-def qr_2_2_1_expected : State := #[
+def qr_2_2_1_expected : Array UInt32 := #[
   0x879531e0, 0xc5ecf37d, 0xbdb886dc, 0xc9a62f8a,
   0x44c20ef3, 0x3390af7f, 0xd9fc690b, 0xcfacafd2,
   0xe46bea80, 0xb00a5631, 0x974c541a, 0x359e9963,
@@ -39,7 +39,7 @@ def qr_2_2_1_expected : State := #[
 -- §2.3.2
 def block_2_3_2_key   := mkKey   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 def block_2_3_2_nonce := mkNonce "000000090000004a00000000"
-def block_2_3_2_expected : State := #[
+def block_2_3_2_expected : Array UInt32 := #[
   0xe4e7f110, 0x15593bd1, 0x1fdd0f50, 0xc47120a3,
   0xc7f4d1c7, 0x0368c033, 0x9aaa2204, 0x4e6cd4c3,
   0x466482d2, 0x09aa9f07, 0x05d7c214, 0xa2028bd9,
@@ -48,7 +48,7 @@ def block_2_3_2_expected : State := #[
 -- A.1 #1
 def block_a1_1_key   := mkKey   "0000000000000000000000000000000000000000000000000000000000000000"
 def block_a1_1_nonce := mkNonce "000000000000000000000000"
-def block_a1_1_expected : State := #[
+def block_a1_1_expected : Array UInt32 := #[
   0xade0b876, 0x903df1a0, 0xe56a5d40, 0x28bd8653,
   0xb819d2bd, 0x1aed8da0, 0xccef36a8, 0xc70d778b,
   0x7c5941da, 0x8d485751, 0x3fe02477, 0x374ad8b8,
@@ -57,7 +57,7 @@ def block_a1_1_expected : State := #[
 -- A.1 #2 (counter = 1)
 def block_a1_2_key   := mkKey   "0000000000000000000000000000000000000000000000000000000000000000"
 def block_a1_2_nonce := mkNonce "000000000000000000000000"
-def block_a1_2_expected : State := #[
+def block_a1_2_expected : Array UInt32 := #[
   0xbee7079f, 0x7a385155, 0x7c97ba98, 0x0d082d73,
   0xa0290fcb, 0x6965e348, 0x3e53c612, 0xed7aee32,
   0x7621b729, 0x434ee69c, 0xb03371d5, 0xd539d874,
@@ -66,7 +66,7 @@ def block_a1_2_expected : State := #[
 -- A.1 #3 (counter = 1)
 def block_a1_3_key   := mkKey   "0000000000000000000000000000000000000000000000000000000000000001"
 def block_a1_3_nonce := mkNonce "000000000000000000000000"
-def block_a1_3_expected : State := #[
+def block_a1_3_expected : Array UInt32 := #[
   0x2452eb3a, 0x9249f8ec, 0x8d829d9b, 0xddd4ceb1,
   0xe8252083, 0x60818b01, 0xf38422b8, 0x5aaa49c9,
   0xbb00ca8e, 0xda3ba7b4, 0xc4b592d1, 0xfdf2732f,
@@ -75,7 +75,7 @@ def block_a1_3_expected : State := #[
 -- A.1 #4 (counter = 2)
 def block_a1_4_key   := mkKey   "00ff000000000000000000000000000000000000000000000000000000000000"
 def block_a1_4_nonce := mkNonce "000000000000000000000000"
-def block_a1_4_expected : State := #[
+def block_a1_4_expected : Array UInt32 := #[
   0xfb4dd572, 0x4bc42ef1, 0xdf922636, 0x327f1394,
   0xa78dea8f, 0x5e269039, 0xa1bebbc1, 0xcaf09aae,
   0xa25ab213, 0x48a6b46c, 0x1b9d9bcb, 0x092c5be6,
@@ -84,7 +84,7 @@ def block_a1_4_expected : State := #[
 -- A.1 #5 (counter = 0)
 def block_a1_5_key   := mkKey   "0000000000000000000000000000000000000000000000000000000000000000"
 def block_a1_5_nonce := mkNonce "000000000000000000000002"
-def block_a1_5_expected : State := #[
+def block_a1_5_expected : Array UInt32 := #[
   0x374dc6c2, 0x3736d58c, 0xb904e24a, 0xcd3f93ef,
   0x88228b1a, 0x96a4dfb3, 0x5b76ab72, 0xc727ee54,
   0x0e0e978a, 0xf3145c95, 0x1b748ea8, 0xf786c297,
@@ -158,17 +158,17 @@ def runTests : IO Unit := do
     return [
       ← checkBool  "§2.1.1 four words"  qr_2_1_1,
       ← checkWords "§2.2.1 on state"    qr_2_2_1_expected
-        (qr qr_2_2_1_state ⟨2, by omega⟩ ⟨7, by omega⟩ ⟨8, by omega⟩ ⟨13, by omega⟩)
+        (qr ⟨qr_2_2_1_state, by decide⟩ ⟨2, by omega⟩ ⟨7, by omega⟩ ⟨8, by omega⟩ ⟨13, by omega⟩).val
     ]
 
   group "block function" do
     return [
-      ← checkWords "§2.3.2"   block_2_3_2_expected (chacha20Block block_2_3_2_key block_2_3_2_nonce 1),
-      ← checkWords "A.1 #1"   block_a1_1_expected  (chacha20Block block_a1_1_key  block_a1_1_nonce  0),
-      ← checkWords "A.1 #2"   block_a1_2_expected  (chacha20Block block_a1_2_key  block_a1_2_nonce  1),
-      ← checkWords "A.1 #3"   block_a1_3_expected  (chacha20Block block_a1_3_key  block_a1_3_nonce  1),
-      ← checkWords "A.1 #4"   block_a1_4_expected  (chacha20Block block_a1_4_key  block_a1_4_nonce  2),
-      ← checkWords "A.1 #5"   block_a1_5_expected  (chacha20Block block_a1_5_key  block_a1_5_nonce  0)
+      ← checkWords "§2.3.2"   block_2_3_2_expected (chacha20Block block_2_3_2_key block_2_3_2_nonce 1).val,
+      ← checkWords "A.1 #1"   block_a1_1_expected  (chacha20Block block_a1_1_key  block_a1_1_nonce  0).val,
+      ← checkWords "A.1 #2"   block_a1_2_expected  (chacha20Block block_a1_2_key  block_a1_2_nonce  1).val,
+      ← checkWords "A.1 #3"   block_a1_3_expected  (chacha20Block block_a1_3_key  block_a1_3_nonce  1).val,
+      ← checkWords "A.1 #4"   block_a1_4_expected  (chacha20Block block_a1_4_key  block_a1_4_nonce  2).val,
+      ← checkWords "A.1 #5"   block_a1_5_expected  (chacha20Block block_a1_5_key  block_a1_5_nonce  0).val
     ]
 
   group "XOR with keystream" do

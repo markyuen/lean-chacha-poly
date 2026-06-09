@@ -52,7 +52,7 @@ def runTests : IO Unit := do
     ]
 
   group "Poly1305" do
-    let tag := poly1305 polyKey (asciiToList "test")
+    let tag := (poly1305 polyKey (asciiToList "test")).val
     return [← checkBool "tag is always 16 bytes" (tag.length == 16)]
 
   group "ChaCha20-Poly1305 AEAD" do

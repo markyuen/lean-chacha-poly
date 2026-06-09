@@ -88,13 +88,13 @@ Parse a hex string into the relevant key/nonce type, panicking on a
 malformed (wrong-length) test vector — acceptable in a test harness. -/
 
 instance : Inhabited ChaCha20.Spec.Key :=
-  ⟨{ bytes := List.replicate 32 0, size := by simp }⟩
+  ⟨⟨List.replicate 32 0, by simp⟩⟩
 
 instance : Inhabited ChaCha20.Spec.Nonce :=
-  ⟨{ bytes := List.replicate 12 0, size := by simp }⟩
+  ⟨⟨List.replicate 12 0, by simp⟩⟩
 
 instance : Inhabited Poly1305.Spec.Key :=
-  ⟨{ bytes := List.replicate 32 0, size := by simp }⟩
+  ⟨⟨List.replicate 32 0, by simp⟩⟩
 
 def mkKey (s : String) : ChaCha20.Spec.Key :=
   (ChaCha20.Spec.Key.ofBytes? (hexToList s)).get!

@@ -84,4 +84,24 @@ theorem macData_aad_binding (aad₁ aad₂ ct : List UInt8)
     macData aad₁ ct ≠ macData aad₂ ct :=
   fun h => hne (macData_aad_eq aad₁ aad₂ ct h1 h2 h)
 
+/-- The MAC input determines the ciphertext (for a fixed AAD). -/
+theorem macData_ct_eq (aad ct₁ ct₂ : List UInt8)
+    (h1 : ct₁.length < 2 ^ 64) (h2 : ct₂.length < 2 ^ 64)
+    (h : macData aad ct₁ = macData aad ct₂) : ct₁ = ct₂ := by
+  have hpad : padTo16 ct₁ = padTo16 ct₂ := macData_ct_inj aad ct₁ ct₂ h
+  have hlen : ct₁.length = ct₂.length := by
+    have h' := h
+    rw [macData, macData, hpad] at h'
+    exact le64_inj _ _ h1 h2 (List.append_cancel_left h')
+  calc ct₁ = (padTo16 ct₁).take ct₁.length := (padTo16_prefix ct₁).symm
+    _ = (padTo16 ct₂).take ct₂.length := by rw [hpad, hlen]
+    _ = ct₂ := padTo16_prefix ct₂
+
+/-- **Ciphertext binding.** Changing the ciphertext changes the Poly1305 MAC
+    input — the deterministic core of "decrypt rejects on a ciphertext change". -/
+theorem macData_ct_binding (aad ct₁ ct₂ : List UInt8)
+    (h1 : ct₁.length < 2 ^ 64) (h2 : ct₂.length < 2 ^ 64) (hne : ct₁ ≠ ct₂) :
+    macData aad ct₁ ≠ macData aad ct₂ :=
+  fun h => hne (macData_ct_eq aad ct₁ ct₂ h1 h2 h)
+
 end Aead.Spec

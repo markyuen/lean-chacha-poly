@@ -11,6 +11,7 @@ import LeanChachaPoly.Poly1305.Spec.Accumulate
 import LeanChachaPoly.Poly1305.Spec.Security
 import LeanChachaPoly.Poly1305.Spec.Clamp
 import LeanChachaPoly.Poly1305.Spec.Tag
+import LeanChachaPoly.Poly1305.Spec.BlockInj
 import LeanChachaPoly.Poly1305.Native
 import LeanChachaPoly.Aead.Spec
 import LeanChachaPoly.Aead.Spec.KeyDerivation

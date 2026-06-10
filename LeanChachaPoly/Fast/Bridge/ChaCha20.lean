@@ -137,6 +137,25 @@ theorem doubleRound_toState (s : St) :
   rw [qr_0_4_8_12 h1, qr_1_5_9_13 h2, qr_2_6_10_14 h3, qr_3_7_11_15 h4,
       qr_0_5_10_15 h5, qr_1_6_11_12 h6, qr_2_7_8_13 h7, qr_3_4_9_14 h8]
 
+/-- **Engines agree.** The register-threaded rounds equal `rounds`. -/
+theorem roundsGo_eq (n : Nat) (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : UInt32) :
+    roundsGo n x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15
+      = rounds n ⟨x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩ := by
+  induction n generalizing x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 with
+  | zero => rfl
+  | succ n ih =>
+    rcases h1 : quarterRound x0 x4 x8 x12 with ⟨a1, b1, c1, d1⟩
+    rcases h2 : quarterRound x1 x5 x9 x13 with ⟨a2, b2, c2, d2⟩
+    rcases h3 : quarterRound x2 x6 x10 x14 with ⟨a3, b3, c3, d3⟩
+    rcases h4 : quarterRound x3 x7 x11 x15 with ⟨a4, b4, c4, d4⟩
+    rcases h5 : quarterRound a1 b2 c3 d4 with ⟨a5, b5, c5, d5⟩
+    rcases h6 : quarterRound a2 b3 c4 d1 with ⟨a6, b6, c6, d6⟩
+    rcases h7 : quarterRound a3 b4 c1 d2 with ⟨a7, b7, c7, d7⟩
+    rcases h8 : quarterRound a4 b1 c2 d3 with ⟨a8, b8, c8, d8⟩
+    rw [rounds]
+    simp only [roundsGo, doubleRound, h1, h2, h3, h4, h5, h6, h7, h8]
+    exact ih _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
 /-- **Supporting.** `rounds n` matches an `n`-fold spec double-round. -/
 theorem rounds_toState (n : Nat) (s : St) :
     (rounds n s).toState
@@ -175,11 +194,22 @@ theorem initSt_toState (key : Key) (nonce : Nonce) (ctr : UInt32) :
   simp [initSt, St.toState, Fast.BytesA.get, ChaCha20.Spec.initState,
     ChaCha20.Spec.magic, Fast.BytesA.toSpec, hk, hn]
 
+/-- The fused block equals add-back-of-rounds on the initial state. -/
+theorem block_eq_addSt_rounds (key : Key) (nonce : Nonce) (ctr : UInt32) :
+    block key nonce ctr
+      = addSt (rounds 10 (initSt key nonce ctr)) (initSt key nonce ctr) := by
+  simp only [block, initSt, roundsGo_eq]
+  rcases hr : rounds 10 (initSt key nonce ctr) with ⟨z0, z1, z2, z3, z4, z5, z6, z7,
+    z8, z9, z10, z11, z12, z13, z14, z15⟩
+  simp only [initSt] at hr
+  rw [hr]
+  rfl
+
 /-- **Key lemma.** The fast block function matches `Spec.chacha20Block`. -/
 theorem block_toState (key : Key) (nonce : Nonce) (ctr : UInt32) :
     (block key nonce ctr).toState
       = ChaCha20.Spec.chacha20Block key.toSpec nonce.toSpec ctr := by
-  rw [block, ChaCha20.Spec.chacha20Block, ChaCha20.Spec.tenDoubleRounds,
+  rw [block_eq_addSt_rounds, ChaCha20.Spec.chacha20Block, ChaCha20.Spec.tenDoubleRounds,
     addSt_toState, rounds_toState, initSt_toState]
 
 /-! ## Serialization bridge -/
@@ -449,6 +479,264 @@ theorem chacha20Go_toList (key : Key) (nonce : Nonce) (m : ByteArray)
     rw [show m.size - off = 0 by omega, keystream_zero]
     simp [ChaCha20.Spec.xorBytes]
 
+/-! ## Set-pass bridge
+
+The in-place writer is proved by "splicing": `toList_set` turns each
+`ByteArray.set` into `List.set`, `set4_splice` turns four consecutive sets
+into a `take ++ segment ++ drop` splice, and `splice_step` composes the 16
+word splices at flat offsets, carrying each accumulated segment's length so
+no per-step length side conditions are needed. -/
+
+/-- `set` through the `(·.data.toList)` view. -/
+theorem toList_set (a : ByteArray) (i : Nat) (v : UInt8) (h : i < a.size) :
+    (a.set i v h).data.toList = a.data.toList.set i v := by
+  rw [ByteArray.data_set, Array.toList_set]
+
+/-- Four consecutive `set`s splice a 4-element segment into the list. -/
+private theorem set4_splice (L : List UInt8) (i : Nat) (a b c d : UInt8)
+    (h : i + 4 ≤ L.length) :
+    (((L.set i a).set (i+1) b).set (i+2) c).set (i+3) d
+      = L.take i ++ [a, b, c, d] ++ L.drop (i + 4) := by
+  have ht : (L.take i).length = i := by simp [List.length_take]; omega
+  have s1 : L.set i a = L.take i ++ a :: L.drop (i+1) := by
+    rw [List.set_eq_take_append_cons_drop, if_pos (by omega)]
+  have s2 : (L.take i ++ a :: L.drop (i+1)).set (i+1) b
+      = L.take i ++ a :: b :: L.drop (i+2) := by
+    rw [List.set_append_right _ _ (by omega), ht, Nat.add_sub_cancel_left,
+      List.set_cons_succ, List.drop_eq_getElem_cons (by omega : i + 1 < L.length),
+      List.set_cons_zero]
+  have s3 : (L.take i ++ a :: b :: L.drop (i+2)).set (i+2) c
+      = L.take i ++ a :: b :: c :: L.drop (i+3) := by
+    rw [List.set_append_right _ _ (by omega), ht, Nat.add_sub_cancel_left,
+      List.set_cons_succ, List.set_cons_succ,
+      List.drop_eq_getElem_cons (by omega : i + 2 < L.length), List.set_cons_zero]
+  have s4 : (L.take i ++ a :: b :: c :: L.drop (i+3)).set (i+3) d
+      = L.take i ++ a :: b :: c :: d :: L.drop (i+4) := by
+    rw [List.set_append_right _ _ (by omega), ht, Nat.add_sub_cancel_left,
+      List.set_cons_succ, List.set_cons_succ, List.set_cons_succ,
+      List.drop_eq_getElem_cons (by omega : i + 3 < L.length), List.set_cons_zero]
+  rw [s1, s2, s3, s4]
+  simp
+
+/-- **Supporting.** `setXor4` splices 4 XORed bytes into the output. -/
+theorem setXor4_toList (n : Nat) (out : SizedBA n) (w : UInt32) (m : ByteArray)
+    (i : Nat) (hm : i + 4 ≤ m.size) (ho : i + 4 ≤ n) :
+    (setXor4 n out w m i hm ho).val.data.toList
+      = out.val.data.toList.take i
+        ++ List.zipWith (· ^^^ ·) ((m.data.toList.drop i).take 4)
+            (ChaCha20.Spec.u32ToLe w).val
+        ++ out.val.data.toList.drop (i + 4) := by
+  have hsz := out.property
+  rw [slice4_eq m i hm]
+  simp only [setXor4, toList_set]
+  rw [set4_splice _ _ _ _ _ _ (by simp; omega)]
+  simp [ChaCha20.Spec.u32ToLe, byte0]
+
+/-- Compose one `setXor4` splice onto an accumulated splice at flat offsets.
+    The segment length is carried in the conclusion so each step's hypotheses
+    come from the previous step's conclusion (no per-step length proofs). -/
+private theorem splice_step {n : Nat} {out ok : SizedBA n} {P : List UInt8}
+    {off p : Nat} (i q : Nat) (w : UInt32) {m : ByteArray}
+    (hk : ok.val.data.toList
+            = out.val.data.toList.take off ++ P ++ out.val.data.toList.drop i
+          ∧ P.length = p)
+    (hi : i = off + p) (hq : q = i + 4)
+    (hm : i + 4 ≤ m.size) (ho : i + 4 ≤ n) :
+    (setXor4 n ok w m i hm ho).val.data.toList
+        = out.val.data.toList.take off
+          ++ (P ++ List.zipWith (· ^^^ ·) ((m.data.toList.drop i).take 4)
+                (ChaCha20.Spec.u32ToLe w).val)
+          ++ out.val.data.toList.drop q
+      ∧ (P ++ List.zipWith (· ^^^ ·) ((m.data.toList.drop i).take 4)
+            (ChaCha20.Spec.u32ToLe w).val).length = p + 4 := by
+  have hsz := out.property
+  obtain ⟨hk, hP⟩ := hk
+  subst hi hq
+  have hZ : (List.zipWith (· ^^^ ·) ((m.data.toList.drop (off + p)).take 4)
+      (ChaCha20.Spec.u32ToLe w).val).length = 4 := by
+    simp [List.length_zipWith, List.length_take,
+      (ChaCha20.Spec.u32ToLe w).property]
+    omega
+  refine ⟨?_, by simp [hP, hZ]⟩
+  rw [setXor4_toList n ok w m _ hm ho, hk]
+  have hAP : (out.val.data.toList.take off ++ P).length = off + p := by
+    simp [List.length_take, hP]
+    omega
+  have hd : List.drop (off + p + 4)
+      (out.val.data.toList.take off ++ P ++ out.val.data.toList.drop (off + p))
+      = out.val.data.toList.drop (off + p + 4) := by
+    rw [← List.drop_drop, List.drop_left' hAP, List.drop_drop]
+  rw [List.take_left' hAP, hd]
+  simp [List.append_assoc]
+
+/-- **Key lemma.** `setBlockXor` splices the 64-byte message-XOR-keystream
+    segment into the output at `off`. -/
+theorem setBlockXor_toList (n : Nat) (out : SizedBA n) (s : St) (m : ByteArray)
+    (off : Nat) (hm : off + 64 ≤ m.size) (ho : off + 64 ≤ n) :
+    (setBlockXor n out s m off hm ho).val.data.toList
+      = out.val.data.toList.take off
+        ++ List.zipWith (· ^^^ ·) ((m.data.toList.drop off).take 64)
+            (ChaCha20.Spec.serializeBlock s.toState).val
+        ++ out.val.data.toList.drop (off + 64) := by
+  obtain ⟨x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15⟩ := s
+  have hsz := out.property
+  have hL : off + 64 ≤ m.data.toList.length := by simp; omega
+  have H0 : out.val.data.toList
+        = out.val.data.toList.take off ++ [] ++ out.val.data.toList.drop off
+      ∧ ([] : List UInt8).length = 0 := ⟨by simp, rfl⟩
+  have H1 := splice_step off (off + 4) x0 H0 rfl rfl
+    (le_of_off64' hm) (le_of_off64' ho)
+  have H2 := splice_step (off + 4) (off + 8) x1 H1 rfl (Nat.add_assoc off 4 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H3 := splice_step (off + 8) (off + 12) x2 H2 rfl (Nat.add_assoc off 8 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H4 := splice_step (off + 12) (off + 16) x3 H3 rfl (Nat.add_assoc off 12 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H5 := splice_step (off + 16) (off + 20) x4 H4 rfl (Nat.add_assoc off 16 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H6 := splice_step (off + 20) (off + 24) x5 H5 rfl (Nat.add_assoc off 20 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H7 := splice_step (off + 24) (off + 28) x6 H6 rfl (Nat.add_assoc off 24 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H8 := splice_step (off + 28) (off + 32) x7 H7 rfl (Nat.add_assoc off 28 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H9 := splice_step (off + 32) (off + 36) x8 H8 rfl (Nat.add_assoc off 32 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H10 := splice_step (off + 36) (off + 40) x9 H9 rfl (Nat.add_assoc off 36 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H11 := splice_step (off + 40) (off + 44) x10 H10 rfl (Nat.add_assoc off 40 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H12 := splice_step (off + 44) (off + 48) x11 H11 rfl (Nat.add_assoc off 44 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H13 := splice_step (off + 48) (off + 52) x12 H12 rfl (Nat.add_assoc off 48 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H14 := splice_step (off + 52) (off + 56) x13 H13 rfl (Nat.add_assoc off 52 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H15 := splice_step (off + 56) (off + 60) x14 H14 rfl (Nat.add_assoc off 56 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  have H16 := splice_step (off + 60) (off + 64) x15 H15 rfl (Nat.add_assoc off 60 4).symm
+    (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  simp only [ChaCha20.Spec.serializeBlock, St.toState,
+    List.flatMap_cons, List.flatMap_nil, List.append_nil]
+  rw [
+      zipWith_seg 64 60 (off+4) rfl rfl (ChaCha20.Spec.u32ToLe x0).property (le_of_off64' hL),
+      zipWith_seg 60 56 (off+8) rfl (Nat.add_assoc off 4 4).symm (ChaCha20.Spec.u32ToLe x1).property (le_of_off64 (by decide) hL),
+      zipWith_seg 56 52 (off+12) rfl (Nat.add_assoc off 8 4).symm (ChaCha20.Spec.u32ToLe x2).property (le_of_off64 (by decide) hL),
+      zipWith_seg 52 48 (off+16) rfl (Nat.add_assoc off 12 4).symm (ChaCha20.Spec.u32ToLe x3).property (le_of_off64 (by decide) hL),
+      zipWith_seg 48 44 (off+20) rfl (Nat.add_assoc off 16 4).symm (ChaCha20.Spec.u32ToLe x4).property (le_of_off64 (by decide) hL),
+      zipWith_seg 44 40 (off+24) rfl (Nat.add_assoc off 20 4).symm (ChaCha20.Spec.u32ToLe x5).property (le_of_off64 (by decide) hL),
+      zipWith_seg 40 36 (off+28) rfl (Nat.add_assoc off 24 4).symm (ChaCha20.Spec.u32ToLe x6).property (le_of_off64 (by decide) hL),
+      zipWith_seg 36 32 (off+32) rfl (Nat.add_assoc off 28 4).symm (ChaCha20.Spec.u32ToLe x7).property (le_of_off64 (by decide) hL),
+      zipWith_seg 32 28 (off+36) rfl (Nat.add_assoc off 32 4).symm (ChaCha20.Spec.u32ToLe x8).property (le_of_off64 (by decide) hL),
+      zipWith_seg 28 24 (off+40) rfl (Nat.add_assoc off 36 4).symm (ChaCha20.Spec.u32ToLe x9).property (le_of_off64 (by decide) hL),
+      zipWith_seg 24 20 (off+44) rfl (Nat.add_assoc off 40 4).symm (ChaCha20.Spec.u32ToLe x10).property (le_of_off64 (by decide) hL),
+      zipWith_seg 20 16 (off+48) rfl (Nat.add_assoc off 44 4).symm (ChaCha20.Spec.u32ToLe x11).property (le_of_off64 (by decide) hL),
+      zipWith_seg 16 12 (off+52) rfl (Nat.add_assoc off 48 4).symm (ChaCha20.Spec.u32ToLe x12).property (le_of_off64 (by decide) hL),
+      zipWith_seg 12 8  (off+56) rfl (Nat.add_assoc off 52 4).symm (ChaCha20.Spec.u32ToLe x13).property (le_of_off64 (by decide) hL),
+      zipWith_seg 8  4  (off+60) rfl (Nat.add_assoc off 56 4).symm (ChaCha20.Spec.u32ToLe x14).property (le_of_off64 (by decide) hL)]
+  simp only [setBlockXor]
+  rw [H16.1]
+  simp [List.append_assoc]
+
+/-- `take (k+1)` of a list `set` at `k` is `take k` plus the new element. -/
+private theorem take_set_succ (L : List UInt8) (k : Nat) (v : UInt8)
+    (h : k < L.length) :
+    (L.set k v).take (k + 1) = L.take k ++ [v] := by
+  rw [List.take_add_one, List.take_set,
+    List.set_eq_of_length_le (by simp [List.length_take]; omega),
+    List.getElem?_set_self (by omega)]
+  rfl
+
+/-- **Supporting.** The in-place tail XOR splices the element-wise XOR of the
+    message suffix and the keystream suffix (the output suffix is fully
+    overwritten when the keystream covers the message tail). -/
+theorem tailXorSet_toList (m : ByteArray) (off : Nat) (ks : ByteArray) (j : Nat)
+    (out : SizedBA m.size) (hks : m.size ≤ off + ks.size) :
+    (tailXorSet m off ks j out).val.data.toList
+      = out.val.data.toList.take (off + j)
+        ++ List.zipWith (· ^^^ ·) (m.data.toList.drop (off + j))
+            (ks.data.toList.drop j) := by
+  fun_induction tailXorSet with
+  | case1 j out h ih =>
+    rw [ih]
+    have hset : ∀ (v : UInt8) (hv),
+        (⟨out.val.set (off + j) v hv, by rw [size_set]; exact out.property⟩
+          : SizedBA m.size).val.data.toList.take (off + (j + 1))
+        = out.val.data.toList.take (off + j) ++ [v] := by
+      intro v hv
+      rw [show off + (j + 1) = (off + j) + 1 by omega, toList_set,
+        take_set_succ _ _ _ (by simp [out.property]; omega)]
+    rw [hset]
+    rw [List.drop_eq_getElem_cons (l := m.data.toList) (i := off + j) (by simpa using h.1),
+      List.drop_eq_getElem_cons (l := ks.data.toList) (i := j) (by simpa using h.2),
+      List.zipWith_cons_cons]
+    simp only [Nat.add_assoc, ByteArray.getElem_eq_getElem_data, Array.getElem_toList,
+      List.append_assoc, List.cons_append, List.nil_append]
+    rfl
+  | case2 j out h =>
+    have hj : m.size ≤ off + j := by
+      rw [Decidable.not_and_iff_not_or_not] at h
+      rcases h with h | h <;> omega
+    rw [List.drop_eq_nil_of_le (as := m.data.toList) (by simp; omega),
+      List.take_of_length_le (by simp [out.property]; omega)]
+    simp
+
+/-- **Key lemma.** The set-based fused loop keeps the prefix `[0, off)` and
+    overwrites the suffix with the spec XOR. -/
+theorem chacha20SetGo_toList (key : Key) (nonce : Nonce) (m : ByteArray)
+    (ctr : UInt32) (off : Nat) (out : SizedBA m.size) :
+    (chacha20SetGo key nonce m ctr off out).data.toList
+      = out.val.data.toList.take off
+        ++ ChaCha20.Spec.xorBytes (m.data.toList.drop off)
+            (ChaCha20.Spec.keystream key.toSpec nonce.toSpec ctr (m.size - off)) := by
+  fun_induction chacha20SetGo with
+  | case1 ctr off out h ih =>
+    rw [ih]
+    have ho := setBlockXor_toList m.size out (block key nonce ctr) m off h h
+    rw [block_toState] at ho
+    have hZlen : (List.zipWith (· ^^^ ·) ((m.data.toList.drop off).take 64)
+        (ChaCha20.Spec.serializeBlock
+          (ChaCha20.Spec.chacha20Block key.toSpec nonce.toSpec ctr)).val).length = 64 := by
+      simp [List.length_zipWith, List.length_take,
+        (ChaCha20.Spec.serializeBlock _).property]
+      omega
+    have htake : (setBlockXor m.size out (block key nonce ctr) m off h h).val.data.toList.take
+          (off + 64)
+        = out.val.data.toList.take off
+          ++ List.zipWith (· ^^^ ·) ((m.data.toList.drop off).take 64)
+              (ChaCha20.Spec.serializeBlock
+                (ChaCha20.Spec.chacha20Block key.toSpec nonce.toSpec ctr)).val := by
+      rw [ho]
+      exact List.take_left' (by simp [List.length_take, hZlen, out.property]; omega)
+    rw [htake]
+    have hsplit : ChaCha20.Spec.xorBytes (m.data.toList.drop off)
+          (ChaCha20.Spec.keystream key.toSpec nonce.toSpec ctr (m.size - off))
+        = List.zipWith (· ^^^ ·) ((m.data.toList.drop off).take 64)
+            (ChaCha20.Spec.serializeBlock
+              (ChaCha20.Spec.chacha20Block key.toSpec nonce.toSpec ctr)).val
+          ++ ChaCha20.Spec.xorBytes (m.data.toList.drop (off + 64))
+              (ChaCha20.Spec.keystream key.toSpec nonce.toSpec (ctr + 1)
+                (m.size - (off + 64))) := by
+      rw [keystream_block_cons _ _ _ _ (by omega),
+        show m.size - off - 64 = m.size - (off + 64) by omega,
+        ChaCha20.Spec.xorBytes, ChaCha20.Spec.xorBytes,
+        zipWith_block_split _ _ _ (ChaCha20.Spec.serializeBlock _).property (by simp; omega),
+        List.drop_drop]
+    rw [hsplit, List.append_assoc]
+  | case2 ctr off out h hlt =>
+    rw [tailXorSet_toList _ _ _ _ _
+        (by rw [size_pushBlock, size_emptyWithCapacity]; omega),
+      pushBlock_toList, block_toState, toList_emptyWithCapacity, List.nil_append,
+      keystream_le_64 _ _ _ _ (by omega),
+      show m.size - off = (m.data.toList.drop off).length by simp,
+      ChaCha20.Spec.xorBytes, List.drop_zero, zipWith_take_right]
+    simp
+  | case3 ctr off out h hlt =>
+    have hlen : out.val.data.toList.length ≤ off := by simp [out.property]; omega
+    rw [show m.size - off = 0 by omega, keystream_zero,
+      List.take_of_length_le hlen]
+    simp [ChaCha20.Spec.xorBytes]
+
 /-! ## Capstone -/
 
 /-- **Capstone.** The fast ChaCha20 equals the spec on every input:
@@ -458,8 +746,24 @@ theorem chacha20_eq_spec (key : Key) (nonce : Nonce) (ctr : UInt32)
     (msg : ByteArray) :
     (chacha20 key nonce ctr msg).data.toList
       = ChaCha20.Spec.chacha20 key.toSpec nonce.toSpec ctr msg.data.toList := by
-  rw [chacha20, chacha20Go_toList, ChaCha20.Spec.chacha20]
+  rw [chacha20, chacha20SetGo_toList, ChaCha20.Spec.chacha20]
   simp
+
+/-- **Supporting.** The retained push-based pass also matches the spec
+    (the previous capstone proof, verbatim). -/
+theorem chacha20Push_toList (key : Key) (nonce : Nonce) (ctr : UInt32)
+    (msg : ByteArray) :
+    (chacha20Push key nonce ctr msg).data.toList
+      = ChaCha20.Spec.chacha20 key.toSpec nonce.toSpec ctr msg.data.toList := by
+  rw [chacha20Push, chacha20Go_toList, ChaCha20.Spec.chacha20]
+  simp
+
+/-- **Engines agree.** The set-based pass equals the retained push-based pass. -/
+theorem chacha20_eq_pushPass (key : Key) (nonce : Nonce) (ctr : UInt32)
+    (msg : ByteArray) :
+    chacha20 key nonce ctr msg = chacha20Push key nonce ctr msg := by
+  apply toList_inj
+  rw [chacha20_eq_spec, chacha20Push_toList]
 
 /-- **Engines agree.** The fused pass equals the retained two-pass
     composition (XOR against a materialized keystream). -/

@@ -10,12 +10,14 @@ A compiled-speed ChaCha20 over `ByteArray`:
 - The round mixing reuses `ChaCha20.Spec.quarterRound` *verbatim* (inlined),
   so the fast and spec round functions contain literally the same ARX terms —
   the bridge proof never reasons about ARX semantics.
-- Encryption is a fused single pass: each 64-byte block is computed in
-  registers and XORed directly against the message into a capacity-reserved
-  `ByteArray` (`ByteArray.push` into reserved capacity is an in-place O(1)
-  write) — no intermediate keystream buffer. The two-pass composition
-  (`xorBytes` + `keystream`) is retained for `derivePolyKey` and as the
-  differential baseline.
+- Encryption is a fused single pass: each 64-byte block is computed with the
+  16 state words register-threaded (`roundsGo` — the words are loop
+  parameters, so the compiled loop keeps them in registers) and XOR-written
+  in place into a pre-sized output with `ByteArray.set` (a static-inline
+  store in the runtime, unlike the exported `ByteArray.push` call) — no
+  intermediate keystream buffer. The push-based pass (`chacha20Push`) and
+  the two-pass composition (`xorBytes` + `keystream`, needed by
+  `derivePolyKey`) are retained as differential baselines.
 
 Equivalence with `ChaCha20.Spec.chacha20` is proved in
 `LeanChachaPoly.Fast.Bridge.ChaCha20` (`chacha20_eq_spec`).
@@ -62,6 +64,28 @@ def rounds : Nat → St → St
   | 0, s => s
   | n + 1, s => rounds n (doubleRound s)
 
+/-- `n` double-rounds with the 16 state words register-threaded: the words are
+    parameters, so the compiled loop keeps them in 16 `uint32` locals across
+    all `n` iterations and allocates a single `St` at the end. Equals `rounds`
+    (`roundsGo_eq` in the bridge). -/
+def roundsGo : Nat →
+    UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 →
+    UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → UInt32 → St
+  | 0, x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15 =>
+    ⟨x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩
+  | n + 1, x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15 =>
+    -- Column rounds
+    let (x0, x4, x8,  x12) := quarterRound x0 x4 x8  x12
+    let (x1, x5, x9,  x13) := quarterRound x1 x5 x9  x13
+    let (x2, x6, x10, x14) := quarterRound x2 x6 x10 x14
+    let (x3, x7, x11, x15) := quarterRound x3 x7 x11 x15
+    -- Diagonal rounds
+    let (x0, x5, x10, x15) := quarterRound x0 x5 x10 x15
+    let (x1, x6, x11, x12) := quarterRound x1 x6 x11 x12
+    let (x2, x7, x8,  x13) := quarterRound x2 x7 x8  x13
+    let (x3, x4, x9,  x14) := quarterRound x3 x4 x9  x14
+    roundsGo n x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15
+
 /-- Add two states word-by-word. -/
 def addSt (a b : St) : St :=
   ⟨a.x0 + b.x0, a.x1 + b.x1, a.x2 + b.x2, a.x3 + b.x3,
@@ -92,10 +116,34 @@ def initSt (key : Key) (nonce : Nonce) (counter : UInt32) : St :=
     x15 := leToU32 (n 8 (by omega))  (n 9 (by omega))  (n 10 (by omega)) (n 11 (by omega)) }
 
 /-- The full ChaCha20 block function: 20 rounds of mixing, then add back the
-    initial state. -/
+    initial state. Fully fused: the 16 initial words are computed into locals
+    (the same little-endian loads as `initSt`), mixed register-threaded
+    (`roundsGo`), and added back inline — one `St` allocation per block.
+    Equals `addSt (rounds 10 (initSt …)) (initSt …)`
+    (`block_eq_addSt_rounds` in the bridge). -/
 def block (key : Key) (nonce : Nonce) (counter : UInt32) : St :=
-  let s := initSt key nonce counter
-  addSt (rounds 10 s) s
+  let k (i : Nat) (h : i < 32) : UInt8 := key.get i h
+  let n (i : Nat) (h : i < 12) : UInt8 := nonce.get i h
+  let y0  : UInt32 := 0x61707865
+  let y1  : UInt32 := 0x3320646e
+  let y2  : UInt32 := 0x79622d32
+  let y3  : UInt32 := 0x6b206574
+  let y4  := leToU32 (k 0 (by omega))  (k 1 (by omega))  (k 2 (by omega))  (k 3 (by omega))
+  let y5  := leToU32 (k 4 (by omega))  (k 5 (by omega))  (k 6 (by omega))  (k 7 (by omega))
+  let y6  := leToU32 (k 8 (by omega))  (k 9 (by omega))  (k 10 (by omega)) (k 11 (by omega))
+  let y7  := leToU32 (k 12 (by omega)) (k 13 (by omega)) (k 14 (by omega)) (k 15 (by omega))
+  let y8  := leToU32 (k 16 (by omega)) (k 17 (by omega)) (k 18 (by omega)) (k 19 (by omega))
+  let y9  := leToU32 (k 20 (by omega)) (k 21 (by omega)) (k 22 (by omega)) (k 23 (by omega))
+  let y10 := leToU32 (k 24 (by omega)) (k 25 (by omega)) (k 26 (by omega)) (k 27 (by omega))
+  let y11 := leToU32 (k 28 (by omega)) (k 29 (by omega)) (k 30 (by omega)) (k 31 (by omega))
+  let y12 := counter
+  let y13 := leToU32 (n 0 (by omega))  (n 1 (by omega))  (n 2 (by omega))  (n 3 (by omega))
+  let y14 := leToU32 (n 4 (by omega))  (n 5 (by omega))  (n 6 (by omega))  (n 7 (by omega))
+  let y15 := leToU32 (n 8 (by omega))  (n 9 (by omega))  (n 10 (by omega)) (n 11 (by omega))
+  match roundsGo 10 y0 y1 y2 y3 y4 y5 y6 y7 y8 y9 y10 y11 y12 y13 y14 y15 with
+  | ⟨z0, z1, z2, z3, z4, z5, z6, z7, z8, z9, z10, z11, z12, z13, z14, z15⟩ =>
+    ⟨z0 + y0, z1 + y1, z2 + y2, z3 + y3, z4 + y4, z5 + y5, z6 + y6, z7 + y7,
+     z8 + y8, z9 + y9, z10 + y10, z11 + y11, z12 + y12, z13 + y13, z14 + y14, z15 + y15⟩
 
 /-! ## Serialization -/
 
@@ -148,12 +196,14 @@ where
   termination_by min a.size b.size - i
   decreasing_by omega
 
-/-! ## Fused keystream-XOR pass
+/-! ## Fused keystream-XOR pass (push-based, retained)
 
 Computes each 64-byte block in registers and XORs it directly against the
-message bytes, writing the output once — no intermediate keystream buffer.
-The two-pass composition (`xorBytes` of a materialized `keystream`) is
-retained above; `chacha20_eq_twoPass` proves the engines agree. -/
+message bytes, pushing the output once — no intermediate keystream buffer.
+Superseded by the in-place set-based pass below (`chacha20`); retained as
+`chacha20Push` with the engines-agree corollary `chacha20_eq_pushPass`. The
+two-pass composition (`xorBytes` of a materialized `keystream`) is retained
+above; `chacha20_eq_twoPass` proves those engines agree. -/
 
 /-- Push 4 message bytes XORed with the little-endian bytes of `w`. -/
 @[inline] def pushXor4 (acc : ByteArray) (w : UInt32) (m : ByteArray) (i : Nat)
@@ -210,8 +260,9 @@ def chacha20Go (key : Key) (nonce : Nonce) (m : ByteArray) (ctr : UInt32)
   termination_by m.size - off
   decreasing_by omega
 
-/-- Encrypt or decrypt a message (fused single pass). -/
-def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
+/-- The retained push-based fused pass (the previous `chacha20` body);
+    `chacha20_eq_pushPass` proves the engines agree. -/
+def chacha20Push (key : Key) (nonce : Nonce) (counter : UInt32)
     (msg : ByteArray) : ByteArray :=
   chacha20Go key nonce msg counter 0 (ByteArray.emptyWithCapacity msg.size)
 
@@ -241,5 +292,98 @@ theorem size_keystream (key : Key) (nonce : Nonce) (counter : UInt32) (len : Nat
   simp only [keystream, ByteArray.size_extract, size_keystreamGo,
     size_emptyWithCapacity]
   omega
+
+/-! ## In-place fused pass (set-based)
+
+The output is pre-sized with one `copySlice` (a memcpy of the message), then
+each 64-byte block is XOR-written in place with `ByteArray.set` — which is a
+static-inline store in the runtime, unlike the exported `ByteArray.push` call.
+The push-based pass (`chacha20Go`/`chacha20Push`) is retained above;
+`chacha20_eq_pushPass` proves the engines agree. -/
+
+theorem size_set (a : ByteArray) (i : Nat) (v : UInt8) (h : i < a.size) :
+    (a.set i v h).size = a.size := by
+  rw [← ByteArray.size_data, ByteArray.data_set, Array.size_set, ByteArray.size_data]
+
+/-- A `ByteArray` of known size `n` (output buffer carrying its size invariant). -/
+abbrev SizedBA (n : Nat) := { o : ByteArray // o.size = n }
+
+/-- XOR-write 4 bytes in place: `out[i+k] := m[i+k] ^^^ (w >>> 8k)`. -/
+@[inline] def setXor4 (n : Nat) (out : SizedBA n) (w : UInt32) (m : ByteArray)
+    (i : Nat) (hm : i + 4 ≤ m.size) (ho : i + 4 ≤ n) : SizedBA n :=
+  have hsz := out.property
+  ⟨((((out.val.set i ((m[i]'(by omega)) ^^^ w.toUInt8) (by omega)).set
+      (i+1) ((m[i+1]'(by omega)) ^^^ (w >>> 8).toUInt8) (by simp [size_set]; omega)).set
+      (i+2) ((m[i+2]'(by omega)) ^^^ (w >>> 16).toUInt8) (by simp [size_set]; omega)).set
+      (i+3) ((m[i+3]'(by omega)) ^^^ (w >>> 24).toUInt8) (by simp [size_set]; omega)),
+   by simp [size_set, hsz]⟩
+
+/-- Bound glue for the unrolled writer at flat offsets (cheap term proofs;
+    32 `omega` calls in one declaration would exhaust the heartbeat budget). -/
+theorem le_of_off64 {off c bound : Nat} (hc : c + 4 ≤ 64)
+    (h : off + 64 ≤ bound) : off + c + 4 ≤ bound := by omega
+
+theorem le_of_off64' {off bound : Nat} (h : off + 64 ≤ bound) :
+    off + 4 ≤ bound := by omega
+
+/-- XOR-write 64 bytes at `off`: the message slice XOR the serialized state. -/
+def setBlockXor (n : Nat) (out : SizedBA n) (s : St) (m : ByteArray) (off : Nat)
+    (hm : off + 64 ≤ m.size) (ho : off + 64 ≤ n) : SizedBA n :=
+  let o1  := setXor4 n out s.x0  m off        (le_of_off64' hm) (le_of_off64' ho)
+  let o2  := setXor4 n o1  s.x1  m (off + 4)  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o3  := setXor4 n o2  s.x2  m (off + 8)  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o4  := setXor4 n o3  s.x3  m (off + 12) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o5  := setXor4 n o4  s.x4  m (off + 16) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o6  := setXor4 n o5  s.x5  m (off + 20) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o7  := setXor4 n o6  s.x6  m (off + 24) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o8  := setXor4 n o7  s.x7  m (off + 28) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o9  := setXor4 n o8  s.x8  m (off + 32) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o10 := setXor4 n o9  s.x9  m (off + 36) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o11 := setXor4 n o10 s.x10 m (off + 40) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o12 := setXor4 n o11 s.x11 m (off + 44) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o13 := setXor4 n o12 s.x12 m (off + 48) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o14 := setXor4 n o13 s.x13 m (off + 52) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  let o15 := setXor4 n o14 s.x14 m (off + 56) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+  setXor4 n o15 s.x15 m (off + 60) (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho)
+
+/-- In-place tail XOR: `out[off+j] := m[off+j] ^^^ ks[j]` until either runs out. -/
+def tailXorSet (m : ByteArray) (off : Nat) (ks : ByteArray) (j : Nat)
+    (out : SizedBA m.size) : SizedBA m.size :=
+  if h : off + j < m.size ∧ j < ks.size then
+    tailXorSet m off ks (j + 1)
+      ⟨out.val.set (off + j) ((m[off + j]'h.1) ^^^ (ks[j]'h.2))
+         (by have := out.property; omega),
+       by rw [size_set]; exact out.property⟩
+  else out
+  termination_by m.size - (off + j)
+  decreasing_by omega
+
+/-- The set-based fused encryption loop. -/
+def chacha20SetGo (key : Key) (nonce : Nonce) (m : ByteArray) (ctr : UInt32)
+    (off : Nat) (out : SizedBA m.size) : ByteArray :=
+  if h : off + 64 ≤ m.size then
+    chacha20SetGo key nonce m (ctr + 1) (off + 64)
+      (setBlockXor m.size out (block key nonce ctr) m off h h)
+  else if off < m.size then
+    (tailXorSet m off
+      (pushBlock (ByteArray.emptyWithCapacity 64) (block key nonce ctr)) 0 out).val
+  else out.val
+  termination_by m.size - off
+  decreasing_by omega
+
+theorem size_copyAll (msg : ByteArray) :
+    (msg.copySlice 0 (ByteArray.emptyWithCapacity msg.size) 0 msg.size).size
+      = msg.size := by
+  rw [ByteArray.copySlice_eq_append]
+  simp [ByteArray.size_append, ByteArray.size_extract, size_emptyWithCapacity,
+    ByteArray.size_data]
+
+/-- Encrypt or decrypt a message (fused single pass, in-place XOR writes into
+    a pre-sized copy of the message). -/
+def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
+    (msg : ByteArray) : ByteArray :=
+  chacha20SetGo key nonce msg counter 0
+    ⟨msg.copySlice 0 (ByteArray.emptyWithCapacity msg.size) 0 msg.size,
+     size_copyAll msg⟩
 
 end ChaCha20.Fast

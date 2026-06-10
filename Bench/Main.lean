@@ -99,6 +99,8 @@ def main : IO Unit := do
     let m := randBA (UInt64.ofNat (100 + bytes)) bytes
     sink := sink + (← row "chacha20 fast" bytes fIters
       (fun i => (ChaCha20.Fast.chacha20 key nonce (UInt32.ofNat i) m).get! 0))
+    sink := sink + (← row "chacha20 fast push" bytes fIters
+      (fun i => (ChaCha20.Fast.chacha20Push key nonce (UInt32.ofNat i) m).get! 0))
     sink := sink + (← row "chacha20 fast 2pass" bytes fIters
       (fun i => (ChaCha20.Fast.xorBytes m
         (ChaCha20.Fast.keystream key nonce (UInt32.ofNat i) m.size)).get! 0))

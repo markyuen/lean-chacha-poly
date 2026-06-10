@@ -203,6 +203,39 @@ and vector tests needed zero changes.
 - Bench (Apple Silicon): ChaCha20 ~295 MB/s at 1 KiB–1 MiB (~1.5× the retained
   two-pass ~200 MB/s); AEAD 231–238 MB/s (from 168–171), still ChaCha20-bound.
 
+## Phase D: register-threaded rounds + in-place set-based writer (2026-06)
+
+Emitted-C inspection overturned the "allocation in the round function" theory:
+the compiler already eliminates the `quarterRound` tuples and updates `St` in
+place when exclusive. The real overheads were 10 non-inlined `doubleRound`
+calls/block round-tripping the 16 words through heap fields, and the per-byte
+`ByteArray.push` runtime call (`set`/`get` are static-inline in the runtime;
+`push` is an exported call). Two changes, prototype-measured before any proof
+work (register-threading alone = 1.13x, below the 1.2x gate; combined = 1.58x):
+
+- `roundsGo` — the 16 state words as loop *parameters* (16 uint32 locals in
+  the compiled loop, one `St` allocation at exit); `block` fused end-to-end
+  (init words as lets, `roundsGo 10`, add-back inline).
+- Set-based writer — output pre-sized with one `copySlice` memcpy, then
+  `setXor4`/`setBlockXor` XOR-write each block in place via `ByteArray.set`
+  on a `SizedBA` subtype (zero-cost, erased); `chacha20SetGo` mirrors the
+  push loop. Push pass retained as `chacha20Push` (+`chacha20_eq_pushPass`);
+  two-pass and `chacha20_eq_twoPass` untouched.
+- Bridge: `roundsGo_eq` (induction + the 8-rcases pattern),
+  `block_eq_addSt_rounds` (so `block_toState` keeps its statement),
+  splice kit (`toList_set`, `set4_splice`, `setXor4_toList`, `splice_step` —
+  carries the accumulated segment length in the conclusion so the 16 steps
+  chain with no length side conditions), `setBlockXor_toList`,
+  `tailXorSet_toList`, `chacha20SetGo_toList`. Capstone `chacha20_eq_spec`
+  name/statement/axioms unchanged → AEAD bridge/AxiomGuard/tests zero changes.
+- Gotchas: 30+ `omega`s in one declaration exhaust the heartbeat budget — use
+  shared term-proof helpers (`le_of_off64`); `rw [← List.drop_drop]` must be
+  staged inside an isolated `have` (wrong occurrence in the main goal).
+- Bench (Apple Silicon, 64 KiB): ChaCha20 476 MB/s (was 301, 1.58x; push pass
+  338, two-pass 220); AEAD 316–335 MB/s (was 231–238). At 64 B the push pass
+  is slightly faster (267 vs 301 ns — the `copySlice` init dominates tiny
+  messages); AEAD there is Poly1305-dominated either way.
+
 ## Future work
 
 - **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from
@@ -210,7 +243,8 @@ and vector tests needed zero changes.
   whole library uniformly foundational.
 - **Unconditional security.** Discharge `Nat.Prime (2¹³⁰ − 5)` via a Pratt certificate,
   removing the `[Fact (Nat.Prime P)]` hypothesis.
-- **Faster ChaCha20.** Still the AEAD bottleneck (~295 MB/s vs limb Poly1305's
-  ~1.1 GB/s): the remaining scalar win is per-block allocation in the round
-  function (each `quarterRound` allocates nested pairs, each `doubleRound` a
-  fresh `St`).
+- **Faster ChaCha20.** Still the AEAD bottleneck (~475 MB/s vs limb Poly1305's
+  ~1.1 GB/s): the remaining measured scalar win is `USize` indexing (~+12%,
+  prototyped — needs a `msg.size < USize.size` guard branch with `chacha20Push`
+  as the proven fallback, and ~150–250 lines of bridge glue); SIMD is outside
+  Lean's current reach.

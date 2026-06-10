@@ -155,6 +155,20 @@ def runTests : IO Unit := do
       results := results.push (← checkBool s!"len {len}" ok)
     return results.toList
 
+  group "fused vs push-pass" do
+    -- The set-based in-place chacha20 must agree with the retained push-based
+    -- engine across block-boundary lengths (hits all three chacha20SetGo
+    -- cases). Proved by chacha20_eq_pushPass; this exercises the compiled paths.
+    let fk := fastKey (ChaCha20.Spec.Key.ofBytes? (randList 31 32)).get!
+    let fn := fastNonce (ChaCha20.Spec.Nonce.ofBytes? (randList 32 12)).get!
+    let mut results := #[]
+    for len in diffLengths do
+      let msgBA := (randList (UInt64.ofNat (5000 + len)) len).toByteArray
+      let ok := ChaCha20.Fast.chacha20 fk fn 7 msgBA
+        == ChaCha20.Fast.chacha20Push fk fn 7 msgBA
+      results := results.push (← checkBool s!"len {len}" ok)
+    return results.toList
+
   group "differential fast vs spec" do
     let specKey := (ChaCha20.Spec.Key.ofBytes? (randList 1 32)).get!
     let specNonce := (ChaCha20.Spec.Nonce.ofBytes? (randList 2 12)).get!

@@ -84,16 +84,20 @@ The Phase A GMP-`Nat` engine is retained as `accumulateNat` with its own
 spec-equivalence theorem (`accumulateNat_eq`) and the corollary that the two
 engines agree on every input (`accumulate_eq_accumulateNat`).
 
-The fast ChaCha20 is a fused single pass: each 64-byte block is computed in
-registers and XORed directly against the message — no intermediate keystream
-buffer. The two-pass composition (`xorBytes` + `keystream`) is retained (the
-key derivation needs `keystream`) with the corollary that the two engines
-agree on every input (`chacha20_eq_twoPass`).
+The fast ChaCha20 is a fused single pass: each 64-byte block is computed with
+the 16 state words register-threaded through the round loop (`roundsGo` — the
+words are loop parameters, so the compiled loop keeps them in registers) and
+XOR-written in place into a pre-sized output with `ByteArray.set` — no
+intermediate keystream buffer, one allocation per block. The push-based pass
+(`chacha20Push`) and the two-pass composition (`xorBytes` + `keystream`, which
+the key derivation needs) are retained with corollaries that the engines agree
+on every input (`chacha20_eq_pushPass`, `chacha20_eq_twoPass`).
 
 Indicative local throughput (`lake exe bench`, Apple Silicon, 64 KiB messages):
-ChaCha20 ~295 MB/s fast (fused) vs ~200 MB/s for the retained two-pass vs
-~14 MB/s spec; Poly1305 ~1.1 GB/s fast (limb engine) vs ~16 MB/s for the
-retained Nat engine vs ~3 MB/s spec; AEAD ~230 MB/s fast vs ~2 MB/s spec.
+ChaCha20 ~475 MB/s fast (in-place set pass) vs ~340 MB/s for the retained
+push pass vs ~220 MB/s for the retained two-pass vs ~14 MB/s spec; Poly1305
+~1.1 GB/s fast (limb engine) vs ~17 MB/s for the retained Nat engine vs
+~3 MB/s spec; AEAD ~320 MB/s fast vs ~2 MB/s spec.
 
 The spec is directly executable: the test suite (`lake exe test`) runs it against the
 RFC 8439 vectors, runs the same vectors through the fast implementation, and
@@ -197,10 +201,11 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   uniformly foundational — no `bv_decide` axiom.
 - Discharge `Nat.Prime (2¹³⁰ − 5)` (Pratt certificate) to make the security bounds
   unconditional.
-- Speed up the fast ChaCha20 further (still the AEAD bottleneck at ~295 MB/s
-  vs the limb Poly1305's ~1.1 GB/s): the keystream-XOR pass is now fused;
-  reducing per-block allocation in the round function is the remaining scalar
-  win; SIMD is outside Lean's current reach.
+- Speed up the fast ChaCha20 further (still the AEAD bottleneck at ~475 MB/s
+  vs the limb Poly1305's ~1.1 GB/s): the remaining measured scalar win is
+  `USize` indexing (~+12%, prototyped), which needs a `msg.size < USize.size`
+  guard branch and substantial bridge glue; SIMD is outside Lean's current
+  reach.
 
 ## References
 

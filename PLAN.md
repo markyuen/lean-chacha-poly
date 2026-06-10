@@ -1,204 +1,98 @@
-# lean-chacha-poly
+# Development history — the path taken
 
-Formally verified ChaCha20-Poly1305 AEAD in Lean 4.
-A focused, self-contained first verification effort.
+This is a retrospective of how `lean-chacha-poly` reached its current state. For *what*
+is proved and *how to use it*, see [`README.md`](README.md). The project is complete:
+`lake build` is `sorry`-free, the RFC 8439 vectors pass, and the capstones are
+axiom-clean (modulo one documented `bv_decide` axiom).
 
-## Why this scope
+> **Correction to the original scope.** The first design notes described this as an
+> "axiom-free, Mathlib-free" project with security "out of scope." That turned out to be
+> too pessimistic: the Poly1305 *information-theoretic* security results **are** provable
+> in Lean and now form the centerpiece (using Mathlib's `Polynomial`/`ZMod`). The only
+> non-foundational axiom is the `bv_decide` SAT-certificate behind the quarter-round
+> bijection.
 
-ChaCha20-Poly1305 is the ideal first target because it is:
+## Stage 1 — Functional correctness
 
-- **Axiom-free**: no primality assumptions, no external axioms.
-  The entire proof chain follows from Lean's standard library.
-- **Mathlib-free**: no algebraic geometry, no field theory beyond
-  modular arithmetic over a fixed prime. `omega` and `simp` do
-  the heavy lifting.
-- **Cleanly decomposable**: the two capstone theorems each split
-  into sub-goals that are independent and modest in difficulty.
-- **Critically important**: ChaCha20-Poly1305 is TLS 1.3's
-  preferred cipher suite. A verified implementation is directly
-  useful in practice.
+Defined the three primitives over `List UInt8` and proved the functional capstones:
 
-## Capstone theorems
+- ChaCha20: keystream-length correctness + XOR cancellation ⇒ `chacha20_involutive`
+  (encrypt = decrypt) and `chacha20_length`.
+- AEAD: `decrypt_encrypt` (the roundtrip) by algebraic assembly — `encrypt` emits
+  `ct ‖ tag`, `decrypt` splits it, recomputes the same tag, and re-applies the ChaCha20
+  involution.
+- **Native bridges**: a `ByteArray` implementation per primitive, proved equal to the
+  spec (`*_eq_spec`), so every spec theorem transfers to executable code.
 
-### 1. ChaCha20 involution
+Validated against the RFC 8439 test vectors (`Tests/`).
 
-```lean
-theorem chacha20_involutive (key nonce counter msg) :
-    chacha20 key nonce counter (chacha20 key nonce counter msg) = msg
-```
+## Stage 2 — Information-theoretic security (the centerpiece)
 
-**Proof chain:**
+Built the Poly1305 unforgeability argument as a tower:
 
-```
-chacha20_involutive
-  └── xorBytes_self_cancel          ← THE key lemma (Spec/Xor.lean)
-        └── UInt8.xor_cancel        ← (x ^^^ k) ^^^ k = x
-  └── keystream_length              ← precondition: lengths match
-        └── serializeBlock_length   ← each block = 64 bytes
-              └── u32ToLe_length    ← each word → 4 bytes
-```
+1. `accumulate_eq_poly` — the iterative MAC loop equals polynomial evaluation in
+   `GF(P)`, `P = 2¹³⁰ − 5` (`Spec/Accumulate.lean`).
+2. `accumulate_cast_eq_eval` — recast in `ZMod P`: the accumulator is `(msgPoly B).eval r`.
+3. `poly1305_almost_universal` — over the field, two distinct block-lists collide for at
+   most `max #blocks` keys `r`, because a colliding `r` is a root of a nonzero difference
+   polynomial and a degree-`n` polynomial has ≤ `n` roots (`Polynomial.card_roots'`).
+   Field-ness needs `P` prime, taken as `[Fact (Nat.Prime P)]`.
+4. `poly1305_almost_delta_universal` + `collision_union_bound` + the ≤ 8 candidate count
+   ⇒ `poly1305_byte_forgery`: the real byte-level bound `8·⌈L/16⌉`.
+5. `Injectivity.lean`: the `2^(8·len)` padding makes the byte→block encoding injective
+   (`leVal_inj → blockToNat_inj/finalBlockToNat_inj → toBlocks_inj`), lifting the bound
+   to distinct *messages*.
 
-All of these are low-difficulty proofs. `xorBytes_self_cancel`
-is a single list induction. `keystream_length` is arithmetic
-about ceiling division. `serializeBlock_length` is a `simp`
-after unfolding.
+On the AEAD side: `decrypt_verifies` (verify-before-decrypt) and `macData_inj` /
+`*_binding` (the RFC §2.8 length-framed MAC input is injective in `(aad, ciphertext)`).
 
-### 2. AEAD roundtrip
+## Stage 3 — Subtype standardization
 
-```lean
-theorem decrypt_encrypt (key nonce plaintext aad) :
-    decrypt key nonce (encrypt key nonce plaintext aad) aad
-    = some plaintext
-```
+Replaced three inconsistent ways of carrying length invariants (structures-with-proofs,
+threaded proof parameters, and unchecked `!`-indexing) with one: `{ x // p x }` subtypes
+in `Subtypes.lean` (`Bytes n`, `Words n`, `Padded`). `State` became `Words 16` with
+*total* `get`/`set` (no panicking indexing); keys/blocks/tags/MAC-input carry their
+length in the type. The analytic security tower was preserved behind a `blockNats` /
+`toBlockNats` adapter so the migration didn't disturb the axiom-clean proofs.
 
-**Proof chain:**
+## Stage 4 — Finalization
 
-```
-decrypt_encrypt
-  └── encrypt_length               ← output = pt.length + 16
-        └── chacha20_length        ← cipher preserves length
-        └── poly1305_length        ← tag = 16 bytes
-  └── List.take_append (ct part)
-  └── List.drop_append (tag part)
-  └── poly1305 determinism         ← same inputs → same tag (rfl)
-  └── chacha20_involutive          ← apply ChaCha20 capstone
-```
+- **Reorg.** Surfaced capstone-grade results at each primitive's top level
+  (`Correctness.lean` for functional correctness, `Security.lean` / `Injectivity.lean`
+  for security), with supporting lemmas under `<Primitive>/Spec/`. Eliminated the
+  "declared in Spec, proved elsewhere" split and the empty `Block.lean`.
+- **Dedup / prune.** One shared `foldl_add_eq_sum` (was copied 4×); removed `rfl` no-op
+  lemmas and unused characterizations.
+- **Comments.** Every significant theorem tagged `**Capstone.**` / `**Key lemma.**` /
+  `**Supporting.**`; purged stale prose (the old "Mathlib-free / remaining gap / out of
+  scope" notes).
+- **Docs.** This file and a full `README.md`, including an honest "what is NOT covered"
+  section.
 
-The AEAD roundtrip is essentially "structural assembly" —
-it assembles previously proved lemmas. The only creative step
-is the length arithmetic to confirm take/drop split correctly.
-
-## Proof difficulty map
-
-| File | Hardest theorem | Difficulty | Primary tactic |
-|------|----------------|------------|----------------|
-| Spec/Xor.lean | `xorBytes_self_cancel` | Low | `induction`, `simp` |
-| Spec/Keystream.lean | `keystream_length` | Low | `omega` |
-| Spec/Block.lean | `serializeBlock_length` | Low | `simp` |
-| Spec/QuarterRound.lean | `quarterRound_test_vector` | Trivial | `decide` |
-| Poly1305/Spec.lean | `accumulate_lt_P` | Low-med | `induction`, `omega` |
-| Poly1305/Spec/Accumulate.lean | `accumulate_eq_poly` | Medium | `induction`, `ring` |
-| Poly1305/Spec/Blocking.lean | `toBlocks_length` | Low-med | `induction`, `omega` |
-| Aead/Spec.lean | `decrypt_encrypt` | Low | assembly |
-
-No theorem in this library requires Mathlib, field theory, or
-number theory beyond `omega` and basic `Nat` lemmas.
-
-## What is NOT proved here
-
-**Side-channel resistance.** The proofs guarantee correctness —
-same inputs produce same outputs and decrypt undoes encrypt —
-but say nothing about timing. Constant-time execution requires
-compiler-level guarantees outside Lean's model. This is
-explicitly out of scope.
-
-**Security reductions.** "Breaking ChaCha20-Poly1305 implies
-solving a hard problem" is a game-based security proof that
-requires a probabilistic framework (see VCV-io). Out of scope.
-
-**Nonce uniqueness.** Using the same (key, nonce) pair for two
-messages is catastrophic for Poly1305. The library cannot enforce
-this; it is a usage constraint. Out of scope.
-
-## Development order
-
-### Phase 0: make it compile
-
-Fill in all function bodies (currently `sorry`d implementations)
-until `lake build` succeeds and the test suite (`lake exe test`)
-produces correct output for all RFC 8439 vectors.
-
-Suggested order within Phase 0:
-1. `u32ToLe` / `leToU32` / `serializeBlock`
-2. `doubleRound`, `tenDoubleRounds`, `chacha20Block`
-3. `keystream`, `chacha20`
-4. `leToNat16`, `extractR`, `extractS`, `toBlocks`
-5. `accumulate`, `poly1305`
-6. `derivePolyKey`, `encrypt`, `decrypt`
-
-### Phase 1: foundational lemmas
-
-Prove the leaves of the dependency tree first:
-- `UInt8.xor_cancel` (likely `decide`)
-- `u32ToLe_length` (likely `simp [u32ToLe]`)
-- `serializeBlock_length`
-- `keystream_length`
-- `poly1305_length`
-- `accumulate_lt_P`
-
-### Phase 2: ChaCha20 capstone
-
-- `xorBytes_self_cancel`
-- `chacha20_length`
-- `chacha20_involutive`  ← ChaCha20 done
-
-### Phase 3: Poly1305 properties
-
-- `toBlocks_length`
-- `accumulate_eq_poly` (medium difficulty — induction + ring)
-- `accumulate_append`
-
-### Phase 4: AEAD capstone
-
-- `encrypt_length`
-- `decrypt_encrypt`  ← AEAD done
-
-### Phase 5: ByteArray bridges
-
-- `ChaCha20.Native.chacha20_involutive`
-- `Poly1305.Native.poly1305_size`
-- `Aead.Native.decrypt_encrypt`
-
-## Exit criteria
-
-The project is complete when:
-1. `lake build` succeeds with zero `sorry` warnings
-2. `lake exe test` prints all ✓ for RFC 8439 vectors
-3. The three capstone theorems compile:
-   - `ChaCha20.Spec.chacha20_involutive`
-   - `Aead.Spec.decrypt_encrypt`
-   - `Aead.Native.decrypt_encrypt`
-
-## File structure
+## Current structure
 
 ```
-lean-chacha-poly/
-├── lakefile.lean
-├── lean-toolchain         (Lean 4.29.1)
-├── PLAN.md
-├── LeanChachaPoly.lean    (root import)
-├── LeanChachaPoly/
-│   ├── ChaCha20/
-│   │   ├── Spec.lean              types, definitions, capstones C1–C5
-│   │   ├── Native.lean            ByteArray bridge
-│   │   └── Spec/
-│   │       ├── QuarterRound.lean  QR properties, test vector
-│   │       ├── Block.lean         block function size
-│   │       ├── Keystream.lean     keystream_length
-│   │       └── Xor.lean           xorBytes_self_cancel (KEY LEMMA)
-│   ├── Poly1305/
-│   │   ├── Spec.lean              types, definitions, capstones P1–P5
-│   │   ├── Native.lean            ByteArray bridge
-│   │   └── Spec/
-│   │       ├── Accumulate.lean    accumulate = polynomial eval
-│   │       └── Blocking.lean      toBlocks properties
-│   └── Aead/
-│       ├── Spec.lean              construction + capstones A1–A5
-│       ├── Native.lean            ByteArray bridge
-│       └── Spec/
-│           ├── KeyDerivation.lean padTo16, le64 lemmas
-│           └── MacData.lean       macData structural lemmas
-└── Test/
-    ├── Main.lean
-    ├── Helpers.lean
-    ├── ChaCha20Test.lean  RFC 8439 §2.1.1, §2.3.2, §2.4.2, A.1–A.2
-    ├── Poly1305Test.lean  RFC 8439 §2.5.2, A.3 #1–7
-    └── AeadTest.lean      RFC 8439 §2.6.2, §2.8.2, A.5 + integration
+LeanChachaPoly/
+  Subtypes.lean
+  ChaCha20/   Spec · Correctness · Native            + Spec/{QuarterRound,Keystream,Seek,Permutation,Xor}
+  Poly1305/   Spec · Security · Injectivity · Native + Spec/{Sum,Blocking,Accumulate,Tag,Clamp}
+  Aead/       Spec · Correctness · Security · Native  + Spec/{KeyDerivation,MacData}
+Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · PropertiesTest · Helpers
 ```
 
-## References
+## Verification
 
-- RFC 8439 — ChaCha20 and Poly1305 for IETF Protocols (June 2018)
-- D.J. Bernstein, "ChaCha, a variant of Salsa20" (2008)
-- D.J. Bernstein, "The Poly1305-AES message-authentication code" (2005)
-- kim-em/lean-zip — architectural inspiration
+- `lake build` — 0 `sorry`.
+- `#print axioms` on every capstone — `{propext, Classical.choice, Quot.sound}`, plus the
+  pre-existing `quarterRound …bv_decide.ax` pair (the lone non-foundational axiom).
+- `lake exe test` — all RFC 8439 vector groups + property checks pass.
+
+## Future work
+
+- **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from
+  `rotl32_inv` / `rotl32_xor` / `xor_self_cancel`) instead of `bv_decide`, making the
+  whole library uniformly foundational.
+- **Unconditional security.** Discharge `Nat.Prime (2¹³⁰ − 5)` via a Pratt certificate,
+  removing the `[Fact (Nat.Prime P)]` hypothesis.
+- **Clamped probability.** Package the full-field bound as the explicit clamped
+  probability `8⌈L/16⌉ / 2¹⁰⁶`.

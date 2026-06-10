@@ -85,4 +85,35 @@ theorem blockNats_toBlocks (msg : List UInt8) :
     rw [go_cons bs hne, dif_neg hlen, toBlocks_go_cons bs hne, dif_neg hlen]
     simp [blockNats]
 
+/-! ## Block count = `⌈L/16⌉` -/
+
+/-- **Key lemma.** The block count is exactly `⌈L/16⌉ = (L + 15) / 16`: every 16
+    bytes start a full block and any remainder (including the empty message's
+    none) is one final block. This is what makes the security bounds' published
+    `8⌈L/16⌉` form literal. -/
+theorem toBlockNats_length (msg : List UInt8) :
+    (toBlockNats msg).length = (msg.length + 15) / 16 := by
+  unfold toBlockNats
+  induction msg using toBlockNats.go.induct with
+  | case1 => simp [toBlockNats.go]
+  | case2 bs hne _block _rest hlen ih =>
+    have ih' : (toBlockNats.go (bs.drop 16)).length = ((bs.drop 16).length + 15) / 16 := ih
+    rw [go_cons bs hne, dif_pos hlen, List.length_cons, ih']
+    have hlen' : (bs.take 16).length = 16 := hlen
+    have htake := @List.length_take UInt8 16 bs
+    have hdrop := @List.length_drop UInt8 16 bs
+    omega
+  | case3 bs hne _block hlen =>
+    rw [go_cons bs hne, dif_neg hlen]
+    have hlen' : ¬(bs.take 16).length = 16 := hlen
+    have htake := @List.length_take UInt8 16 bs
+    have hpos : bs.length ≠ 0 := fun h => hne (List.eq_nil_of_length_eq_zero h)
+    simp only [List.length_cons, List.length_nil]
+    omega
+
+/-- **Supporting.** The same count for the typed blocking. -/
+theorem blockNats_length (msg : List UInt8) :
+    (blockNats (toBlocks msg)).length = (msg.length + 15) / 16 := by
+  rw [blockNats_toBlocks, toBlockNats_length]
+
 end Poly1305.Spec

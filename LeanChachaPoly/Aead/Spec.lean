@@ -33,7 +33,6 @@ content beyond what was proved in ChaCha20.Spec and Poly1305.Spec.
   Aead.Security           ← authenticity: verify-before-decrypt, macData injectivity
   Aead.Spec.KeyDerivation ← derivePolyKey, padTo16/le64 lemmas
   Aead.Spec.MacData       ← macData injectivity lemmas
-  Aead.Native             ← ByteArray bridge
 -/
 namespace Aead.Spec
 
@@ -90,7 +89,12 @@ def encrypt (key : Key) (nonce : Nonce)
   ciphertext ++ tag.val
 
 /-- AEAD decryption: returns `some plaintext` on success,
-    `none` if the tag does not match. -/
+    `none` if the tag does not match.
+
+    **Timing caveat.** `recvTag == expTag.val` is a short-circuiting list
+    comparison — the classic MAC timing leak if executed as-is. The functional
+    spec only fixes input→output behavior; a production implementation must
+    compare tags in constant time. -/
 def decrypt (key : Key) (nonce : Nonce)
     (ciphertextAndTag aad : List UInt8) : Option (List UInt8) :=
   if ciphertextAndTag.length < 16 then none
@@ -107,7 +111,7 @@ def decrypt (key : Key) (nonce : Nonce)
 /-!
 This file is construction only. The properties live elsewhere:
 - functional roundtrip / length facts — `Aead.Correctness` (`decrypt_encrypt`, …)
-- authenticity — `Aead/Security.lean` (`decrypt_verifies`, `macData_inj`, bindings)
+- authenticity — `Aead/Security.lean` (`decrypt_verifies`, `macData_inj`, `aead_forgery_bound`)
 - `macData`/`padTo16`/`le64` structural lemmas — `Aead/Spec/{KeyDerivation,MacData}.lean`
 -/
 

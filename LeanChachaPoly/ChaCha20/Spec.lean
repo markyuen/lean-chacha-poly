@@ -27,7 +27,6 @@ with the message.
   ChaCha20.Spec.Seek          ← CTR seekability
   ChaCha20.Spec.Permutation   ← quarterRound is a bijection
   ChaCha20.Spec.Xor           ← XOR cancellation lemmas
-  ChaCha20.Native             ← ByteArray bridge + equivalence
 -/
 namespace ChaCha20.Spec
 
@@ -154,7 +153,15 @@ def serializeBlock (s : State) : Bytes 64 :=
 
 /-! ## Keystream and encryption (RFC 8439 §2.4) -/
 
-/-- Generate `len` bytes of keystream. -/
+/-- Generate `len` bytes of keystream.
+
+    **Counter-wrap caveat.** The block counter is `counter + UInt32.ofNat i`,
+    which wraps modulo `2³²`: a single message longer than `2³² · 64` bytes
+    (≈ 256 GiB) would silently reuse keystream blocks. The RFC's 32-bit counter
+    has the same limit; the involution theorem still holds (XOR cancels
+    whatever the keystream is), but confidentiality requires staying below it.
+    No theorem here carries that hypothesis — it is a usage constraint, like
+    nonce freshness. -/
 def keystream (key : Key) (nonce : Nonce) (counter : UInt32) (len : Nat) : List UInt8 :=
   let nBlocks := (len + 63) / 64
   let stream := (List.range nBlocks).flatMap fun i =>

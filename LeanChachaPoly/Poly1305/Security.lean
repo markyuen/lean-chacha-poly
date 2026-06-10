@@ -3,6 +3,8 @@ import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
 import LeanChachaPoly.Poly1305.Spec.Accumulate
 import LeanChachaPoly.Poly1305.Spec.Clamp
+import LeanChachaPoly.Poly1305.Spec.Tag
+import LeanChachaPoly.Poly1305.Injectivity
 import Mathlib
 
 /-!
@@ -21,6 +23,14 @@ The argument, in order:
 3. **Forgery bound** (`poly1305_almost_universal`): two distinct messages
    collide under at most `deg` keys `r`, where `deg` is the block count — the
    roots of a nonzero difference polynomial over the field `ZMod P`.
+4. **Byte level** (`poly1305_byte_forgery`): a forger targeting a fixed
+   accumulator offset mod `2¹²⁸` succeeds for at most `8 · max #blocks` keys.
+5. **Tag level** (`poly1305_tag_forgery`, `poly1305_tag_forgery_prob` — the
+   capstones): about the actual `poly1305` function and actual 16-byte tags.
+   Two tag equations subtract to cancel the one-time pad `s` exactly
+   (`poly1305_value`), so a forger who saw the tag of `M` and forges a tag for
+   `M' ≠ M` succeeds for at most `8⌈L/16⌉` of the `2¹⁰⁶` clamped keys — the
+   published Poly1305 forgery probability `8⌈L/16⌉ / 2¹⁰⁶`.
 
 `ZMod P` is a field only when `P` is prime. `2¹³⁰ − 5` is the Poly1305 prime,
 but a 40-digit primality certificate is out of scope here, so the
@@ -417,13 +427,15 @@ theorem accumulate_eq_eval_val (r : Nat) (B : List Nat) :
 
 /-! ## The byte-level forgery bound -/
 
-/-- **Capstone.** The real byte-level Poly1305 forgery bound — the `8⌈L/16⌉` factor.
+/-- **Key lemma.** The byte-level Poly1305 forgery bound — the `8⌈L/16⌉` factor.
     The accumulator for `B` at key `r` is the canonical representative
-    `((msgPoly B).eval r).val ∈ [0, P)`; the real tag difference is
-    `(acc(B) − acc(B')) mod 2¹²⁸` (the one-time pad `s` cancels). A forger targeting
-    a fixed offset `Δ mod 2¹²⁸` succeeds for at most `8 · max #blocks` keys: each key
-    realizes one of the ≤ 8 field-offsets `c` (`candidate_cover`), and each offset is
-    hit by at most `max #blocks` keys (the Δ-universal root count). -/
+    `((msgPoly B).eval r).val ∈ [0, P)`. A forger targeting a fixed offset
+    `Δ mod 2¹²⁸` succeeds for at most `8 · max #blocks` keys: each key realizes
+    one of the ≤ 8 field-offsets `c` (`candidate_cover`), and each offset is hit
+    by at most `max #blocks` keys (the Δ-universal root count). Fixing `Δ` is
+    exactly the forger's situation: `Δ` is determined by the observed tag and
+    the forged tag (`poly1305_tag_forgery` below makes this literal — there the
+    one-time pad `s` is *proved* to cancel, not argued in prose). -/
 theorem poly1305_byte_forgery [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (Δ : ℤ) :
@@ -490,19 +502,20 @@ private theorem goPos (bs : List UInt8) : ∀ b ∈ toBlockNats.go bs, 0 < b ∧
 theorem toBlockNats_pos (msg : List UInt8) : ∀ b ∈ toBlockNats msg, 0 < b ∧ b < P := by
   unfold toBlockNats; exact goPos msg
 
-/-- **Capstone.** Message-level forgery bound: for two messages whose block
-    expansions differ, the Poly1305 polynomials collide for at most `max #blocks` keys
-    `r : ZMod P`. (Lifting the `blockNats (toBlocks M) ≠ blockNats (toBlocks M')`
-    hypothesis to `M ≠ M'` is `toBlocks_inj`, in `Injectivity`.) -/
-theorem poly1305_almost_universal_msg [Fact (Nat.Prime P)] (M M' : List UInt8)
-    (hne : blockNats (toBlocks M) ≠ blockNats (toBlocks M')) :
+/-- **Capstone.** Message-level almost-universality: for any two distinct messages
+    `M ≠ M'`, the Poly1305 polynomials collide for at most `max #blocks` keys
+    `r : ZMod P`. The encoding injectivity (`toBlockNats_inj`, from `Injectivity`)
+    lifts the block-list hypothesis to plain message inequality. -/
+theorem poly1305_almost_universal_msg' [Fact (Nat.Prime P)] (M M' : List UInt8)
+    (hne : M ≠ M') :
     (Finset.univ.filter (fun r : ZMod P =>
       (msgPoly (blockNats (toBlocks M))).eval r
         = (msgPoly (blockNats (toBlocks M'))).eval r)).card
       ≤ max (blockNats (toBlocks M)).length (blockNats (toBlocks M')).length := by
-  rw [blockNats_toBlocks, blockNats_toBlocks] at hne ⊢
+  rw [blockNats_toBlocks, blockNats_toBlocks]
   exact poly1305_almost_universal (toBlockNats M) (toBlockNats M')
-    (toBlockNats_pos M) (toBlockNats_pos M') hne
+    (toBlockNats_pos M) (toBlockNats_pos M')
+    (fun h => hne (toBlockNats_inj M M' h))
 
 /-! ## The clamped forgery probability `8⌈L/16⌉ / 2¹⁰⁶`
 
@@ -513,7 +526,10 @@ theorem poly1305_almost_universal_msg [Fact (Nat.Prime P)] (M M' : List UInt8)
     information-theoretic forgery probability. -/
 
 /-- The clamped Poly1305 key component `r`, as it ranges (in the field) over all
-    clamped 128-bit values. `clampedKeys_card` shows this set has size `2¹⁰⁶`. -/
+    clamped 128-bit values. `clampedKeys_card` shows this set has size `2¹⁰⁶`, and
+    `clamp_fiber_card` shows every element has exactly `2²²` clamp-preimages — so
+    the uniform distribution on this set is what a uniform 16-byte `r` pushed
+    through `clamp` actually produces. -/
 noncomputable def clampedKeys : Finset (ZMod P) :=
   (Finset.range (2 ^ 128)).image (fun x => ((clamp x : Nat) : ZMod P))
 
@@ -531,12 +547,13 @@ theorem clampedKeys_card : clampedKeys.card = 2 ^ 106 := by
   obtain ⟨xb, _, rfl⟩ := hb
   exact cast_inj_of_lt (lt_trans (clamp_lt xa) hPlt) (lt_trans (clamp_lt xb) hPlt) hab
 
-/-- **Capstone.** The clamped Poly1305 forgery probability. Drawing the key `r`
-    uniformly from the `2¹⁰⁶` clamped values, the fraction that let a forger hit a
-    fixed tag offset `Δ mod 2¹²⁸` is at most `8·max #blocks / 2¹⁰⁶` — the published
-    `8⌈L/16⌉ / 2¹⁰⁶` Poly1305 bound. The numerator carries from the full-field count
-    (`poly1305_byte_forgery`): the bad clamped keys are a subset of the bad field
-    keys, so clamping never *adds* forgeries; the denominator is `clampedKeys_card`. -/
+/-- **Key lemma.** The clamped forgery probability at the accumulator level. Drawing
+    the key `r` uniformly from the `2¹⁰⁶` clamped values, the fraction that let a
+    forger hit a fixed offset `Δ mod 2¹²⁸` is at most `8·max #blocks / 2¹⁰⁶`. The
+    numerator carries from the full-field count (`poly1305_byte_forgery`): the bad
+    clamped keys are a subset of the bad field keys, so clamping never *adds*
+    forgeries; the denominator is `clampedKeys_card`. The tag-level capstone
+    (`poly1305_tag_forgery_prob`) restates this about actual `poly1305` outputs. -/
 theorem poly1305_clamped_forgery_prob [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (Δ : ℤ) :
@@ -555,5 +572,116 @@ theorem poly1305_clamped_forgery_prob [Fact (Nat.Prime P)] (B B' : List Nat)
   rw [clampedKeys_card, Nat.cast_pow, Nat.cast_ofNat]
   gcongr
   exact_mod_cast hbad
+
+/-! ## The tag-level forgery theorem
+
+    Everything above counts keys by their *accumulator* behavior. These final
+    theorems are about the actual `poly1305` function and actual 16-byte tags:
+    if a key produces tag `t` on `M` and tag `t'` on `M' ≠ M`, then subtracting
+    the two tag equations (`poly1305_value`) cancels the one-time pad `s`
+    *exactly* — Lean checks the cancellation, it is not a prose argument — and
+    the key's `r` lands in the byte-level bad set at the offset
+    `Δ = leToNat16 t − leToNat16 t'` determined by the two tags. Fixing `Δ` is
+    therefore exactly the one-shot forger's situation: `Δ` is computable from
+    the observed tag and the forged tag. -/
+
+open scoped Classical in
+/-- **Capstone.** The tag-level Poly1305 forgery bound, about the real `poly1305`.
+    For distinct messages `M ≠ M'` and any tag pair `(t, t')`, the clamped keys `r`
+    admitting *any* key (i.e. any pad `s`) that tags `M` as `t` and `M'` as `t'`
+    number at most `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉` — the published `8⌈L/16⌉` factor,
+    literally, with `⌈L/16⌉ = (L + 15) / 16`. -/
+theorem poly1305_tag_forgery [Fact (Nat.Prime P)] (M M' : List UInt8)
+    (hne : M ≠ M') (t t' : Bytes 16) :
+    (clampedKeys.filter (fun r : ZMod P =>
+      ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key M' = t')).card
+      ≤ 8 * max ((M.length + 15) / 16) ((M'.length + 15) / 16) := by
+  classical
+  haveI : NeZero P := ⟨P_pos.ne'⟩
+  have hpos : ∀ b ∈ blockNats (toBlocks M), 0 < b ∧ b < P := by
+    rw [blockNats_toBlocks]; exact toBlockNats_pos M
+  have hpos' : ∀ b ∈ blockNats (toBlocks M'), 0 < b ∧ b < P := by
+    rw [blockNats_toBlocks]; exact toBlockNats_pos M'
+  have hBne : blockNats (toBlocks M) ≠ blockNats (toBlocks M') := by
+    rw [blockNats_toBlocks, blockNats_toBlocks]
+    exact fun h => hne (toBlockNats_inj M M' h)
+  -- every successful key lands in the byte-level bad set at Δ = leToNat16 t − leToNat16 t'
+  have hsub : (clampedKeys.filter (fun r : ZMod P =>
+      ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key M' = t'))
+      ⊆ Finset.univ.filter (fun r : ZMod P =>
+          ((((msgPoly (blockNats (toBlocks M))).eval r).val : ℤ)
+            - ((msgPoly (blockNats (toBlocks M'))).eval r).val)
+            ≡ ((leToNat16 t : ℤ) - leToNat16 t') [ZMOD 2 ^ 128]) := by
+    intro r hr
+    rw [Finset.mem_filter] at hr ⊢
+    obtain ⟨-, key, hkey, ht, ht'⟩ := hr
+    refine ⟨Finset.mem_univ _, ?_⟩
+    -- the accumulators are the canonical field representatives
+    have hacc : accumulate (extractR key) (blockNats (toBlocks M))
+        = ((msgPoly (blockNats (toBlocks M))).eval r).val := by
+      rw [accumulate_eq_eval_val, hkey]
+    have hacc' : accumulate (extractR key) (blockNats (toBlocks M'))
+        = ((msgPoly (blockNats (toBlocks M'))).eval r).val := by
+      rw [accumulate_eq_eval_val, hkey]
+    -- the two tag equations, read back through the faithful serialization
+    have e1 : (accumulate (extractR key) (blockNats (toBlocks M)) + extractS key) % 2 ^ 128
+        = leToNat16 t := by
+      rw [← poly1305_value key M, ht]
+    have e2 : (accumulate (extractR key) (blockNats (toBlocks M')) + extractS key) % 2 ^ 128
+        = leToNat16 t' := by
+      rw [← poly1305_value key M', ht']
+    show ((((msgPoly (blockNats (toBlocks M))).eval r).val : ℤ)
+            - ((msgPoly (blockNats (toBlocks M'))).eval r).val) % 2 ^ 128
+        = ((leToNat16 t : ℤ) - leToNat16 t') % 2 ^ 128
+    rw [← hacc, ← hacc']
+    -- tags are reduced mod 2¹²⁸
+    have hu : leToNat16 t < 2 ^ 128 := by rw [← e1]; exact Nat.mod_lt _ (by positivity)
+    have hu' : leToNat16 t' < 2 ^ 128 := by rw [← e2]; exact Nat.mod_lt _ (by positivity)
+    -- recast the two tag equations in ℤ
+    have h1 : ((accumulate (extractR key) (blockNats (toBlocks M)) : ℤ) + extractS key) % 2 ^ 128
+        = (leToNat16 t : ℤ) := by
+      have h := congrArg (fun n : ℕ => (n : ℤ)) e1
+      push_cast at h
+      exact h
+    have h2 : ((accumulate (extractR key) (blockNats (toBlocks M')) : ℤ) + extractS key) % 2 ^ 128
+        = (leToNat16 t' : ℤ) := by
+      have h := congrArg (fun n : ℕ => (n : ℤ)) e2
+      push_cast at h
+      exact h
+    -- subtract: the one-time pad `s` cancels
+    have m1 : ((accumulate (extractR key) (blockNats (toBlocks M)) : ℤ) + extractS key)
+        ≡ (leToNat16 t : ℤ) [ZMOD 2 ^ 128] :=
+      h1.trans (Int.emod_eq_of_lt (by positivity) (by exact_mod_cast hu)).symm
+    have m2 : ((accumulate (extractR key) (blockNats (toBlocks M')) : ℤ) + extractS key)
+        ≡ (leToNat16 t' : ℤ) [ZMOD 2 ^ 128] :=
+      h2.trans (Int.emod_eq_of_lt (by positivity) (by exact_mod_cast hu')).symm
+    have hfin := Int.ModEq.sub m1 m2
+    simpa [add_sub_add_right_eq_sub] using hfin
+  calc (clampedKeys.filter (fun r : ZMod P =>
+        ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+          poly1305 key M = t ∧ poly1305 key M' = t')).card
+      ≤ _ := Finset.card_le_card hsub
+    _ ≤ 8 * max (blockNats (toBlocks M)).length (blockNats (toBlocks M')).length :=
+        poly1305_byte_forgery _ _ hpos hpos' hBne _
+    _ = 8 * max ((M.length + 15) / 16) ((M'.length + 15) / 16) := by
+        rw [blockNats_length, blockNats_length]
+
+open scoped Classical in
+/-- **Capstone.** The published Poly1305 forgery probability `8⌈L/16⌉ / 2¹⁰⁶`, at the
+    tag level: with the key component `r` uniform over the `2¹⁰⁶` clamped values, a
+    forger who must turn an observed tag `t` on `M` into a tag `t'` on `M' ≠ M`
+    succeeds with probability at most `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉ / 2¹⁰⁶`. -/
+theorem poly1305_tag_forgery_prob [Fact (Nat.Prime P)] (M M' : List UInt8)
+    (hne : M ≠ M') (t t' : Bytes 16) :
+    ((clampedKeys.filter (fun r : ZMod P =>
+      ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key M' = t')).card : ℝ)
+      / clampedKeys.card
+      ≤ ((8 * max ((M.length + 15) / 16) ((M'.length + 15) / 16) : ℕ) : ℝ) / 2 ^ 106 := by
+  rw [clampedKeys_card, Nat.cast_pow, Nat.cast_ofNat]
+  gcongr
+  exact_mod_cast poly1305_tag_forgery M M' hne t t'
 
 end Poly1305.Spec

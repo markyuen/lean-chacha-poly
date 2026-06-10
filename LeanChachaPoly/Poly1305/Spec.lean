@@ -21,7 +21,6 @@ polynomial evaluation in GF(2¹³⁰ - 5).
   Poly1305.Spec            ← this file: types, definitions, basic properties
   Poly1305.Security        ← almost-universal / byte-level forgery bound  (capstone)
   Poly1305.Injectivity     ← block-encoding injectivity → toBlocks injective  (capstone)
-  Poly1305.Native          ← ByteArray bridge
   ── supporting (Poly1305.Spec.*) ──
   Poly1305.Spec.Sum        ← shared summation helper
   Poly1305.Spec.Blocking   ← block-value bounds, toBlocks ↔ toBlockNats
@@ -62,9 +61,12 @@ def leToNat16 (bs : Bytes 16) : Nat :=
   (List.finRange 16).foldl (fun acc i =>
     acc + (bs.val.get (i.cast bs.property.symm)).toNat * 2^(i.val * 8)) 0
 
-/-- Clamp `r`: clear specific bits per RFC 8439 §2.5.1.
-    Clamping ensures certain bits of r are zero, which prevents
-    timing attacks and simplifies reduction. -/
+/-- Clamp `r`: clear 22 specific bits per RFC 8439 §2.5.1 (see `clamp_rfc` for the
+    exact characterization). Clamping exists to enable fast *implementations*:
+    with the top bits of each 32-bit limb of `r` zeroed, products fit limb
+    arithmetic with delayed carries and lazy reduction. It costs key entropy
+    (2¹⁰⁶ effective keys, `clampImage_card`) but does not weaken the forgery
+    bound's structure. -/
 def clamp (r : Nat) : Nat :=
   r &&& 0x0ffffffc0ffffffc0ffffffc0fffffff
 
@@ -178,8 +180,8 @@ def poly1305 (key : Key) (msg : List UInt8) : Bytes 16 :=
     BASIC PROPERTIES
 
     Small facts about the definitions above. The headline Poly1305 results —
-    the byte-level forgery bound and tag-value exactness — are the *capstones*
-    and live in `Spec/Security.lean` and `Spec/Tag.lean`.
+    the tag-level forgery bound and tag-value exactness — are the *capstones*
+    and live in `Security.lean` and `Spec/Tag.lean`.
     ================================================================ -/
 
 /-- **Supporting.** Tag length (enforced by the `Bytes 16` return type). -/
@@ -203,13 +205,6 @@ theorem accumulate_lt_P (r : Nat) (blocks : List Nat) :
   | cons block rest ih =>
     simp only [List.foldl_cons]
     exact ih _ (step_lt_P r acc block)
-
-/-- **Supporting.** The tag of the empty message is just `s mod 2¹²⁸`. -/
-theorem poly1305_empty (key : Key) :
-    poly1305 key [] =
-      natToLe16 (extractS key % 2^128) := by
-  have h : toBlocks [] = ([], none) := by simp [toBlocks, toBlocks.go]
-  simp [poly1305, h, blockNats, accumulate]
 
 /-- **Supporting.** The clamped `r` fits in 128 bits. -/
 theorem clamp_lt (r : Nat) : clamp r < 2^128 := by

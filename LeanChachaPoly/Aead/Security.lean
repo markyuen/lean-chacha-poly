@@ -1,6 +1,7 @@
 import LeanChachaPoly.Aead.Spec
 import LeanChachaPoly.Aead.Spec.KeyDerivation
 import LeanChachaPoly.Aead.Spec.MacData
+import LeanChachaPoly.Poly1305.Security
 import Mathlib
 
 /-!
@@ -11,9 +12,13 @@ plaintext only when the received tag matches the tag recomputed over
 `(aad, ciphertext)`. There is no control-flow path that releases plaintext on
 an authentication failure — the only `some` is guarded by the tag check.
 
-`le64_inj` / `macData_aad_binding`: the RFC 8439 §2.8 length fields make the MAC
-input injective in the associated data, so changing the AAD changes the MAC
-input (the deterministic core of "reject on AAD mismatch").
+`le64_inj` / `macData_inj`: the RFC 8439 §2.8 length fields make the MAC input
+injective in `(aad, ciphertext)`, so changing either changes the MAC input
+(the deterministic core of "reject on mismatch").
+
+`aead_forgery_bound` / `aead_forgery_prob` combine this with the Poly1305
+security tower: forging the tag for a modified `(aad, ciphertext)` succeeds
+for at most `8·⌈L/16⌉` of the `2¹⁰⁶` clamped one-time keys.
 -/
 
 namespace Aead.Spec
@@ -36,6 +41,21 @@ theorem decrypt_verifies (key : Key) (nonce : Nonce) (ctAndTag aad pt : List UIn
     · rename_i htag
       exact eq_of_beq htag
     · simp at h
+
+/-- **Supporting.** `decrypt_verifies` at a split input: if `decrypt` accepts
+    `ct ++ tag`, the submitted tag *is* the recomputed Poly1305 tag over
+    `macData aad ct`. This is the hinge between acceptance and the forgery
+    counting below: a forged `(aad', ct', tag')` that decrypts successfully
+    satisfies exactly the tag equation `aead_forgery_bound` counts. -/
+theorem decrypt_accepts (key : Key) (nonce : Nonce) (ct tag aad pt : List UInt8)
+    (hlen : tag.length = 16)
+    (h : decrypt key nonce (ct ++ tag) aad = some pt) :
+    tag = (poly1305 (derivePolyKey key nonce) (macData aad ct).val).val := by
+  have hv := decrypt_verifies key nonce (ct ++ tag) aad pt h
+  rw [List.length_append, hlen, Nat.add_sub_cancel,
+    List.drop_append_of_le_length (Nat.le_refl _), List.drop_length, List.nil_append,
+    List.take_append_of_le_length (Nat.le_refl _), List.take_length] at hv
+  exact hv
 
 /-! ## Length-field injectivity -/
 
@@ -79,13 +99,6 @@ theorem macData_aad_eq (aad₁ aad₂ ct : List UInt8)
     _ = (padTo16 aad₂).val.take aad₂.length := by rw [hpad, hlen]
     _ = aad₂ := padTo16_prefix aad₂
 
-/-- **Key lemma (AAD binding).** Changing the associated data changes the Poly1305 MAC input
-    — the deterministic core of "decrypt rejects on AAD mismatch". -/
-theorem macData_aad_binding (aad₁ aad₂ ct : List UInt8)
-    (h1 : aad₁.length < 2 ^ 64) (h2 : aad₂.length < 2 ^ 64) (hne : aad₁ ≠ aad₂) :
-    macData aad₁ ct ≠ macData aad₂ ct :=
-  fun h => hne (macData_aad_eq aad₁ aad₂ ct h1 h2 h)
-
 /-- The MAC input determines the ciphertext (for a fixed AAD). -/
 theorem macData_ct_eq (aad ct₁ ct₂ : List UInt8)
     (h1 : ct₁.length < 2 ^ 64) (h2 : ct₂.length < 2 ^ 64)
@@ -98,13 +111,6 @@ theorem macData_ct_eq (aad ct₁ ct₂ : List UInt8)
   calc ct₁ = (padTo16 ct₁).val.take ct₁.length := (padTo16_prefix ct₁).symm
     _ = (padTo16 ct₂).val.take ct₂.length := by rw [hpad, hlen]
     _ = ct₂ := padTo16_prefix ct₂
-
-/-- **Key lemma (ciphertext binding).** Changing the ciphertext changes the Poly1305 MAC
-    input — the deterministic core of "decrypt rejects on a ciphertext change". -/
-theorem macData_ct_binding (aad ct₁ ct₂ : List UInt8)
-    (h1 : ct₁.length < 2 ^ 64) (h2 : ct₂.length < 2 ^ 64) (hne : ct₁ ≠ ct₂) :
-    macData aad ct₁ ≠ macData aad ct₂ :=
-  fun h => hne (macData_ct_eq aad ct₁ ct₂ h1 h2 h)
 
 /-! ## Full MAC-input injectivity -/
 
@@ -146,5 +152,61 @@ theorem macData_inj (aad₁ ct₁ aad₂ ct₂ : List UInt8)
   · calc ct₁ = (padTo16 ct₁).val.take ct₁.length := (padTo16_prefix ct₁).symm
       _ = (padTo16 ct₂).val.take ct₂.length := by rw [hpadC, hctlen]
       _ = ct₂ := padTo16_prefix ct₂
+
+/-! ## The AEAD forgery bound — where the two towers meet
+
+    The structural results above (`macData_inj`) and the Poly1305 security
+    tower (`poly1305_tag_forgery`) combine: an attacker who modifies
+    `(aad, ct)` must forge the Poly1305 tag of a *different* MAC input, which
+    at most `8⌈L/16⌉` of the `2¹⁰⁶` clamped one-time keys permit.
+
+    **The model.** These theorems quantify over the one-time poly key directly,
+    drawn uniformly from the clamped key space. In the real AEAD that key is
+    `derivePolyKey key nonce` — ChaCha20 keystream output — and "the derived
+    key is uniformly distributed" is precisely the ChaCha20-PRF *assumption*,
+    which is computational and not provable in this development (see README).
+    The chain to `decrypt` is `decrypt_accepts`: acceptance of a forged
+    `ct' ++ tag'` forces the tag equation counted here. -/
+
+open scoped Classical in
+/-- **Capstone.** The combined AEAD forgery bound. If `(aad, ct) ≠ (aad', ct')`
+    (any modification of associated data or ciphertext, within the RFC's `2⁶⁴`
+    length bounds), then the clamped one-time keys under which the original pair
+    tags as `t` *and* the forged pair tags as `t'` number at most
+    `8 · max ⌈L/16⌉ ⌈L'/16⌉`, where `L, L'` are the `macData` lengths. -/
+theorem aead_forgery_bound [Fact (Nat.Prime P)] (aad ct aad' ct' : List UInt8)
+    (ha : aad.length < 2 ^ 64) (hc : ct.length < 2 ^ 64)
+    (ha' : aad'.length < 2 ^ 64) (hc' : ct'.length < 2 ^ 64)
+    (hne : (aad, ct) ≠ (aad', ct')) (t t' : Bytes 16) :
+    (clampedKeys.filter (fun r : ZMod P =>
+      ∃ pkey : Poly1305.Spec.Key, ((extractR pkey : Nat) : ZMod P) = r ∧
+        poly1305 pkey (macData aad ct).val = t ∧
+        poly1305 pkey (macData aad' ct').val = t')).card
+      ≤ 8 * max (((macData aad ct).val.length + 15) / 16)
+                (((macData aad' ct').val.length + 15) / 16) := by
+  apply poly1305_tag_forgery
+  intro h
+  obtain ⟨haad, hct⟩ := macData_inj aad ct aad' ct' ha hc ha' hc' (Subtype.ext h)
+  exact hne (by rw [haad, hct])
+
+open scoped Classical in
+/-- **Capstone.** The AEAD forgery probability: with the one-time poly key uniform
+    over the `2¹⁰⁶` clamped values (the ChaCha20-PRF idealization), an attacker who
+    modifies `(aad, ct)` produces an accepted forgery with probability at most
+    `8 · max ⌈L/16⌉ ⌈L'/16⌉ / 2¹⁰⁶`. -/
+theorem aead_forgery_prob [Fact (Nat.Prime P)] (aad ct aad' ct' : List UInt8)
+    (ha : aad.length < 2 ^ 64) (hc : ct.length < 2 ^ 64)
+    (ha' : aad'.length < 2 ^ 64) (hc' : ct'.length < 2 ^ 64)
+    (hne : (aad, ct) ≠ (aad', ct')) (t t' : Bytes 16) :
+    ((clampedKeys.filter (fun r : ZMod P =>
+      ∃ pkey : Poly1305.Spec.Key, ((extractR pkey : Nat) : ZMod P) = r ∧
+        poly1305 pkey (macData aad ct).val = t ∧
+        poly1305 pkey (macData aad' ct').val = t')).card : ℝ)
+      / clampedKeys.card
+      ≤ ((8 * max (((macData aad ct).val.length + 15) / 16)
+                  (((macData aad' ct').val.length + 15) / 16) : ℕ) : ℝ) / 2 ^ 106 := by
+  rw [clampedKeys_card, Nat.cast_pow, Nat.cast_ofNat]
+  gcongr
+  exact_mod_cast aead_forgery_bound aad ct aad' ct' ha hc ha' hc' hne t t'
 
 end Aead.Spec

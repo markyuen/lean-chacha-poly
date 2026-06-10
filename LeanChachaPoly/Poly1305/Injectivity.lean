@@ -1,7 +1,6 @@
 import LeanChachaPoly.Poly1305.Spec
 import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
-import LeanChachaPoly.Poly1305.Security
 import Mathlib
 
 /-!
@@ -10,7 +9,8 @@ import Mathlib
 The `|= 1 << (8 * len)` step (RFC 8439 §2.5.1) makes block encoding injective:
 distinct chunks — whether they differ in content or in length — map to distinct
 field elements. This is the structural fact behind Poly1305's collision
-resistance (it feeds `toBlocks_inj`, lifting the forgery bound to messages).
+resistance: `toBlocks_inj` is what lets `Poly1305.Security` lift the forgery
+bound from block lists to messages.
 
 We work through a clean recursive little-endian value `leVal`, prove it is
 bounded (`< 256^len`) and injective on equal-length lists, then read off
@@ -125,13 +125,6 @@ theorem finalBlockToNat_inj (a b : List UInt8) (ha : a.length ≤ 16) (hb : b.le
   rw [hlen] at h
   exact leVal_inj a b hlen (by omega)
 
-/-- The sketch's form of chunk-encoding injectivity: chunks differing in content
-    **or** length get distinct encodings. -/
-theorem finalBlock_encoding_distinct (a b : List UInt8) (ha : a.length ≤ 16)
-    (hb : b.length ≤ 16) (hne : a ≠ b) :
-    finalBlockToNat ⟨a, ha⟩ ≠ finalBlockToNat ⟨b, hb⟩ :=
-  fun h => hne (finalBlockToNat_inj a b ha hb h)
-
 /-! ## Full-block injectivity and range separation -/
 
 /-- `leToNat16` is the recursive little-endian value. -/
@@ -245,17 +238,5 @@ theorem toBlockNats_inj (M M' : List UInt8) (h : toBlockNats M = toBlockNats M')
     messages. -/
 theorem toBlocks_inj (M M' : List UInt8) (h : toBlocks M = toBlocks M') : M = M' :=
   toBlockNats_inj M M' (by rw [← blockNats_toBlocks, ← blockNats_toBlocks]; exact congrArg blockNats h)
-
-/-- **Capstone.** Message-level forgery bound (distinct messages). With `toBlocks_inj`
-    closing the lift, the almost-universal bound holds for any two distinct
-    messages `M ≠ M'`, not just distinct block expansions. -/
-theorem poly1305_almost_universal_msg' [Fact (Nat.Prime P)] (M M' : List UInt8)
-    (hne : M ≠ M') :
-    (Finset.univ.filter (fun r : ZMod P =>
-      (msgPoly (blockNats (toBlocks M))).eval r
-        = (msgPoly (blockNats (toBlocks M'))).eval r)).card
-      ≤ max (blockNats (toBlocks M)).length (blockNats (toBlocks M')).length :=
-  poly1305_almost_universal_msg M M' (fun h => hne (toBlockNats_inj M M'
-    (by rw [← blockNats_toBlocks, ← blockNats_toBlocks]; exact h)))
 
 end Poly1305.Spec

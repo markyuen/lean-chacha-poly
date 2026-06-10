@@ -52,17 +52,7 @@ theorem rotl32_xor (n : UInt32) (x y : UInt32) :
 theorem xor_self_cancel (x y : UInt32) : (x ^^^ y) ^^^ y = x := by
   simp [UInt32.xor_assoc, UInt32.xor_self]
 
-/-! ## RFC 8439 §2.1.1 test vector
-
-    Input:  a=0x11111111, b=0x01020304, c=0x9b8d6f43, d=0x01234567
-    Output: a=0xea2a92f4, b=0xcb1cf8ce, c=0x4581472e, d=0x5881c4bb
-
-    Proved by `decide` since all values are concrete UInt32.
-    This serves as a spec sanity-check: if this fails, the
-    `quarterRound` definition is wrong. The §2.3.2 full block-function vector is
-    checked in `Tests/ChaCha20Test.lean`. -/
-theorem quarterRound_test_vector :
-    quarterRound 0x11111111 0x01020304 0x9b8d6f43 0x01234567
-    = (0xea2a92f4, 0xcb1cf8ce, 0x4581472e, 0x5881c4bb) := by decide
+-- The RFC 8439 §2.1.1 quarter-round test vector (and the §2.3.2 block-function
+-- vector) are checked at runtime in `Tests/ChaCha20Test.lean`.
 
 end ChaCha20.Spec

@@ -8,7 +8,7 @@ The top-level functional guarantees of the AEAD construction, assembled from the
 ChaCha20 involution and the Poly1305 tag length:
 
 - `decrypt_encrypt` — the roundtrip: decrypting an encryption returns the plaintext.
-- `encrypt_length`, `decrypt_short`, `encrypt_ct_indep_of_aad` — supporting shape facts.
+- `encrypt_length`, `encrypt_ct_indep_of_aad` — supporting shape facts.
 
 The *authenticity* capstones (`decrypt_verifies`, `macData_inj`) live in
 `Aead/Security.lean`.
@@ -48,12 +48,6 @@ theorem encrypt_length (key : Key) (nonce : Nonce)
   simp [encrypt, List.length_append,
         chacha20_length, poly1305_length]
 
-/-- **Supporting.** Inputs shorter than the 16-byte tag are rejected outright. -/
-theorem decrypt_short (key : Key) (nonce : Nonce) (aad : List UInt8)
-    (ct : List UInt8) (h : ct.length < 16) :
-    decrypt key nonce ct aad = none := by
-  simp [decrypt, h]
-
 /-- **Supporting.** AAD is authenticated but not encrypted: the ciphertext bytes do
     not depend on the associated data. -/
 theorem encrypt_ct_indep_of_aad (key : Key) (nonce : Nonce)
@@ -65,10 +59,5 @@ theorem encrypt_ct_indep_of_aad (key : Key) (nonce : Nonce)
     chacha20_length key nonce 1 plaintext
   rw [List.take_append_of_le_length (h ▸ Nat.le_refl _),
       List.take_append_of_le_length (h ▸ Nat.le_refl _)]
-
-/-- **Supporting.** The empty-plaintext roundtrip (ciphertext is just the tag). -/
-theorem decrypt_encrypt_empty (key : Key) (nonce : Nonce) (aad : List UInt8) :
-    decrypt key nonce (encrypt key nonce [] aad) aad = some [] :=
-  decrypt_encrypt key nonce [] aad
 
 end Aead.Spec

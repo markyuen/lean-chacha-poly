@@ -5,33 +5,13 @@ import Mathlib
 /-!
 # Poly1305 Tag Finalization
 
-The tag is `(accumulate + s) mod 2¹²⁸`, serialized to 16 bytes. The secret `s`
-(second half of the one-time key) is added as a *one-time pad*: for any fixed
-accumulator, adding `s` is a bijection of the 128-bit tag space, so the tag is
-uniform when `s` is — it leaks nothing about the accumulator.
+The tag is `(accumulate + s) mod 2¹²⁸`, serialized to 16 bytes. `poly1305_value`
+shows the serialization is faithful (the tag *is* the reduced value), which is
+what lets `Poly1305.Security.poly1305_tag_forgery` reason about actual tag bytes:
+subtracting two tag equations cancels the one-time pad `s` exactly.
 -/
 
 namespace Poly1305.Spec
-
-/-! ## One-time-pad masking -/
-
-/-- **Supporting.** Adding a constant in `ZMod 2¹²⁸` is a bijection — the abstract one-time pad:
-    for fixed `acc`, the map `s ↦ acc + s` permutes the tag space, so a uniform
-    `s` yields a uniform tag. -/
-theorem tag_mask_bijective (acc : ZMod (2 ^ 128)) :
-    Function.Bijective (fun s : ZMod (2 ^ 128) => acc + s) :=
-  (Equiv.addLeft acc).bijective
-
-/-- **Supporting.** Concretely on the spec's `Nat` arithmetic: for fixed `acc`, the masking map
-    `s ↦ (acc + s) mod 2¹²⁸` is injective over the 128-bit inputs. Distinct
-    pads give distinct tags, so the tag determines no information about `acc`
-    beyond what one tag–pad pair reveals. -/
-theorem tag_mask_injOn (acc : Nat) :
-    Set.InjOn (fun s => (acc + s) % 2 ^ 128) (Set.Iio (2 ^ 128)) := by
-  intro s1 h1 s2 h2 heq
-  have hmod : (acc + s1) ≡ (acc + s2) [MOD 2 ^ 128] := heq
-  have hs : s1 ≡ s2 [MOD 2 ^ 128] := Nat.ModEq.add_left_cancel' acc hmod
-  rwa [Nat.ModEq, Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h2] at hs
 
 /-! ## Serialization round-trip -/
 

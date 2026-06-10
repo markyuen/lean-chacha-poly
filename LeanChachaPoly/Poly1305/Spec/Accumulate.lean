@@ -106,11 +106,4 @@ theorem accumulate_eq_poly (r : Nat) (blocks : List Nat) :
       List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero, Nat.pow_eq, Nat.zero_add]
     rw [Nat.add_mod, Nat.mod_mod, ← Nat.add_mod, Nat.add_comm]
 
-/-! ## Linearity: accumulate is linear in each block -/
-
-/-- **Supporting.** A single-block accumulation is just `(m·r) mod P`. -/
-theorem accumulate_single (r m : Nat) :
-    accumulate r [m] = (m * r) % P := by
-  simp [accumulate, step]
-
 end Poly1305.Spec

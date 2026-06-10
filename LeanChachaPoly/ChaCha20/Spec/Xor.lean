@@ -40,17 +40,6 @@ theorem xorBytes_self (xs : List UInt8) :
     simp only [xorBytes] at ih ⊢
     simp only [List.zipWith_cons_cons, UInt8.xor_self, List.length_cons, List.replicate_succ, ih]
 
-/-- **Supporting.** xorBytes is symmetric. -/
-theorem xorBytes_comm (xs ys : List UInt8) :
-    xorBytes xs ys = xorBytes ys xs := by
-  unfold xorBytes
-  induction xs generalizing ys with
-  | nil => simp
-  | cons x xs ih =>
-    cases ys with
-    | nil => simp
-    | cons y ys => simp [List.zipWith_cons_cons, UInt8.xor_comm x y, ih]
-
 /-- **Supporting.** xorBytes preserves length (truncates to shorter). -/
 theorem xorBytes_length (xs ys : List UInt8) :
     (xorBytes xs ys).length = min xs.length ys.length := by

@@ -11,7 +11,7 @@ Go tests), these exercise behavioral properties: length invariants, the bare
 `keystream` API, empty plaintext, AAD authentication, and ciphertext-body
 tampering. The library states most of these as theorems
 (`chacha20_length`, `poly1305_length`, `encrypt_length`,
-`decrypt_encrypt_empty`, …); here we check them computationally.
+`decrypt_encrypt`, …); here we check them computationally.
 -/
 
 open Tests.Helpers ChaCha20.Spec Poly1305.Spec Aead.Spec

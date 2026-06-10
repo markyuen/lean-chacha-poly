@@ -9,8 +9,10 @@ It verifies three complementary layers:
    test vectors) and `decrypt ∘ encrypt = id`.
 2. **Information-theoretic security** — Poly1305 is an almost-universal hash, so a
    forger's success probability is bounded by `8⌈L/16⌉ / 2¹⁰⁶`. The bound is
-   quantified over every possible attacker and rests on no computational assumption
-   about the hash itself.
+   quantified over every possible attacker and involves no computational hardness
+   assumption; its one mathematical hypothesis is the primality of `2¹³⁰ − 5`, a
+   well-known fact taken as `[Fact (Nat.Prime P)]` rather than yet proved here
+   (see *What is NOT covered*).
 3. **A verified fast implementation** — a `ByteArray`-based implementation
    (`LeanChachaPoly/Fast/`) proved equal to the spec on *every* input
    (`chacha20_eq_spec`, `poly1305_eq_spec`, `encrypt_eq_spec`, `decrypt_eq_spec`),
@@ -98,6 +100,17 @@ ChaCha20 ~475 MB/s fast (in-place set pass) vs ~340 MB/s for the retained
 push pass vs ~220 MB/s for the retained two-pass vs ~14 MB/s spec; Poly1305
 ~1.1 GB/s fast (limb engine) vs ~17 MB/s for the retained Nat engine vs
 ~3 MB/s spec; AEAD ~320 MB/s fast vs ~2 MB/s spec.
+
+These optimizations were driven by reading the **emitted C**
+(`.lake/build/ir/**.c`) rather than by intuition — the first theory about the
+ChaCha20 bottleneck was wrong, and a grep settled it. The full workflow
+(profiling allocations and boxing by grep, the `static inline` vs
+`LEAN_EXPORT` runtime distinction, verifying the optimized shape landed,
+measure-before-prove gating), plus a discussion of which speedups are
+algorithmic vs Lean-runtime-specific and how the design holds up under future
+compiler versions, is written up in
+[docs/optimizing-lean-runtime.md](docs/optimizing-lean-runtime.md) — it
+should transfer to any Lean 4 project with a hot path.
 
 The spec is directly executable: the test suite (`lake exe test`) runs it against the
 RFC 8439 vectors, runs the same vectors through the fast implementation, and

@@ -207,7 +207,7 @@ and vector tests needed zero changes.
 
 Emitted-C inspection overturned the "allocation in the round function" theory:
 the compiler already eliminates the `quarterRound` tuples and updates `St` in
-place when exclusive. The real overheads were 10 non-inlined `doubleRound`
+place when exclusive. The actual overheads were 10 non-inlined `doubleRound`
 calls/block round-tripping the 16 words through heap fields, and the per-byte
 `ByteArray.push` runtime call (`set`/`get` are static-inline in the runtime;
 `push` is an exported call). Two changes, prototype-measured before any proof
@@ -235,6 +235,28 @@ work (register-threading alone = 1.13x, below the 1.2x gate; combined = 1.58x):
   338, two-pass 220); AEAD 316–335 MB/s (was 231–238). At 64 B the push pass
   is slightly faster (267 vs 301 ns — the `copySlice` init dominates tiny
   messages); AEAD there is Poly1305-dominated either way.
+- **Assessment, generality, and version robustness** are discussed in full in
+  [optimizing-lean-runtime.md](optimizing-lean-runtime.md). In one
+  line each: Phase D adds no new verified math but is the first in-place
+  mutation under a capstone (the bridge methodology covers imperative-shaped
+  code); the ChaCha20 phases remove Lean-runtime overhead rather than change
+  the algorithm (directions universal, magnitudes machine-specific); compiler
+  evolution can make these wins redundant but never harmful or unsound, and
+  the retained engines + bench rows are the hedge — the genuinely
+  version-fragile axis is proof churn on toolchain bumps.
+
+### How the compiled code was inspected
+
+Phase D's design came from reading the emitted C
+(`.lake/build/ir/<Module/Path>.c`), not from guessing — the first guess
+("allocation in the round function") was wrong, and a
+`grep -c lean_alloc_ctor` settled it in seconds. The full reusable workflow
+(allocation profiling by grep, reading `lean_is_exclusive` reuse branches,
+spotting boxed-`Nat` arithmetic in signatures, the `static inline` vs
+`LEAN_EXPORT` distinction in `lean.h` that motivated the set-based writer,
+verifying the optimized shapes landed, and the measure-before-prove gate
+discipline) is documented in
+[optimizing-lean-runtime.md](optimizing-lean-runtime.md).
 
 ## Future work
 

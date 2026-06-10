@@ -1,7 +1,8 @@
 import LeanChachaPoly.Poly1305.Spec
 import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
-import Mathlib
+import Mathlib.Algebra.BigOperators.Fin
+import Mathlib.Data.List.GetD
 
 /-!
 # Poly1305 Block-Encoding Injectivity

@@ -1,6 +1,6 @@
 import LeanChachaPoly.Poly1305.Spec
 import LeanChachaPoly.Poly1305.Spec.Sum
-import Mathlib
+import Mathlib.Algebra.Order.BigOperators.Group.List
 
 /-!
 # Poly1305 Message Blocking Properties

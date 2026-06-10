@@ -5,7 +5,11 @@ import LeanChachaPoly.Poly1305.Spec.Accumulate
 import LeanChachaPoly.Poly1305.Spec.Clamp
 import LeanChachaPoly.Poly1305.Spec.Tag
 import LeanChachaPoly.Poly1305.Injectivity
-import Mathlib
+import Mathlib.Algebra.Field.ZMod
+import Mathlib.Algebra.Polynomial.Roots
+import Mathlib.Data.Real.Basic
+import Mathlib.Data.Int.Interval
+import Mathlib.Tactic.GCongr
 
 /-!
 # Poly1305 Security — the almost-universal / forgery bound
@@ -26,9 +30,9 @@ The argument, in order:
 4. **Byte level** (`poly1305_byte_forgery`): a forger targeting a fixed
    accumulator offset mod `2¹²⁸` succeeds for at most `8 · max #blocks` keys.
 5. **Tag level** (`poly1305_tag_forgery`, `poly1305_tag_forgery_prob` — the
-   capstones): about the actual `poly1305` function and actual 16-byte tags.
-   Two tag equations subtract to cancel the one-time pad `s` exactly
-   (`poly1305_value`), so a forger who saw the tag of `M` and forges a tag for
+   capstones): stated about `poly1305` itself and its 16-byte tags.
+   Subtracting the two tag equations (`poly1305_value`) cancels the one-time
+   pad `s`, so a forger who saw the tag of `M` and forges a tag for
    `M' ≠ M` succeeds for at most `8⌈L/16⌉` of the `2¹⁰⁶` clamped keys — the
    published Poly1305 forgery probability `8⌈L/16⌉ / 2¹⁰⁶`.
 
@@ -419,7 +423,7 @@ theorem candidate_card (Δ : ℤ) :
 
 /-- **Key lemma.** The canonical representative `((msgPoly B).eval r).val` of the
     field evaluation *is* the spec accumulator `accumulate r B` (both lie in `[0, P)`),
-    so the byte-level bound below is about the real Poly1305 accumulator. -/
+    so the byte-level bound below applies to the accumulator the spec computes. -/
 theorem accumulate_eq_eval_val (r : Nat) (B : List Nat) :
     accumulate r B = ((msgPoly B).eval (r : ZMod P)).val := by
   haveI : NeZero P := ⟨P_pos.ne'⟩
@@ -432,10 +436,10 @@ theorem accumulate_eq_eval_val (r : Nat) (B : List Nat) :
     `((msgPoly B).eval r).val ∈ [0, P)`. A forger targeting a fixed offset
     `Δ mod 2¹²⁸` succeeds for at most `8 · max #blocks` keys: each key realizes
     one of the ≤ 8 field-offsets `c` (`candidate_cover`), and each offset is hit
-    by at most `max #blocks` keys (the Δ-universal root count). Fixing `Δ` is
-    exactly the forger's situation: `Δ` is determined by the observed tag and
-    the forged tag (`poly1305_tag_forgery` below makes this literal — there the
-    one-time pad `s` is *proved* to cancel, not argued in prose). -/
+    by at most `max #blocks` keys (the Δ-universal root count). Fixing `Δ`
+    models the forger's situation: `Δ` is determined by the observed tag and
+    the forged tag — `poly1305_tag_forgery` below carries this out at the tag
+    level, deriving the cancellation of the one-time pad `s`. -/
 theorem poly1305_byte_forgery [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (Δ : ℤ) :
@@ -520,7 +524,7 @@ theorem poly1305_almost_universal_msg' [Fact (Nat.Prime P)] (M M' : List UInt8)
 /-! ## The clamped forgery probability `8⌈L/16⌉ / 2¹⁰⁶`
 
     The byte-level bound above counts keys `r` over the *whole* field `ZMod P`.
-    The real Poly1305 key `r` is uniform over the `2¹⁰⁶` clamped 128-bit values
+    In the construction, `r` is drawn uniformly from the `2¹⁰⁶` clamped 128-bit values
     (`Poly1305.Spec.clampImage_card`). Restricting the count to that subset and
     dividing by its size turns the combinatorial bound into the published
     information-theoretic forgery probability. -/
@@ -553,7 +557,7 @@ theorem clampedKeys_card : clampedKeys.card = 2 ^ 106 := by
     numerator carries from the full-field count (`poly1305_byte_forgery`): the bad
     clamped keys are a subset of the bad field keys, so clamping never *adds*
     forgeries; the denominator is `clampedKeys_card`. The tag-level capstone
-    (`poly1305_tag_forgery_prob`) restates this about actual `poly1305` outputs. -/
+    (`poly1305_tag_forgery_prob`) restates this at the level of `poly1305` outputs. -/
 theorem poly1305_clamped_forgery_prob [Fact (Nat.Prime P)] (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (Δ : ℤ) :
@@ -576,21 +580,19 @@ theorem poly1305_clamped_forgery_prob [Fact (Nat.Prime P)] (B B' : List Nat)
 /-! ## The tag-level forgery theorem
 
     Everything above counts keys by their *accumulator* behavior. These final
-    theorems are about the actual `poly1305` function and actual 16-byte tags:
-    if a key produces tag `t` on `M` and tag `t'` on `M' ≠ M`, then subtracting
-    the two tag equations (`poly1305_value`) cancels the one-time pad `s`
-    *exactly* — Lean checks the cancellation, it is not a prose argument — and
-    the key's `r` lands in the byte-level bad set at the offset
-    `Δ = leToNat16 t − leToNat16 t'` determined by the two tags. Fixing `Δ` is
-    therefore exactly the one-shot forger's situation: `Δ` is computable from
-    the observed tag and the forged tag. -/
+    theorems are stated about `poly1305` itself and its 16-byte tags: if a key
+    produces tag `t` on `M` and tag `t'` on `M' ≠ M`, subtracting the two tag
+    equations (`poly1305_value`) cancels the one-time pad `s`, and the key's `r`
+    lands in the byte-level bad set at the offset `Δ = leToNat16 t − leToNat16 t'`
+    determined by the two tags. Fixing `Δ` therefore models the one-shot forger:
+    `Δ` is computable from the observed tag and the forged tag. -/
 
 open scoped Classical in
-/-- **Capstone.** The tag-level Poly1305 forgery bound, about the real `poly1305`.
+/-- **Capstone.** The tag-level Poly1305 forgery bound, stated about `poly1305` itself.
     For distinct messages `M ≠ M'` and any tag pair `(t, t')`, the clamped keys `r`
     admitting *any* key (i.e. any pad `s`) that tags `M` as `t` and `M'` as `t'`
     number at most `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉` — the published `8⌈L/16⌉` factor,
-    literally, with `⌈L/16⌉ = (L + 15) / 16`. -/
+    with `⌈L/16⌉` written as `(L + 15) / 16`. -/
 theorem poly1305_tag_forgery [Fact (Nat.Prime P)] (M M' : List UInt8)
     (hne : M ≠ M') (t t' : Bytes 16) :
     (clampedKeys.filter (fun r : ZMod P =>

@@ -1,4 +1,4 @@
-import Mathlib
+import Mathlib.Tactic.Ring
 
 /-!
 # Shared summation helper

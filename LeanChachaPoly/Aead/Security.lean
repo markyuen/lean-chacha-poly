@@ -2,7 +2,6 @@ import LeanChachaPoly.Aead.Spec
 import LeanChachaPoly.Aead.Spec.KeyDerivation
 import LeanChachaPoly.Aead.Spec.MacData
 import LeanChachaPoly.Poly1305.Security
-import Mathlib
 
 /-!
 # AEAD Authenticity — structural properties
@@ -161,8 +160,8 @@ theorem macData_inj (aad₁ ct₁ aad₂ ct₂ : List UInt8)
     at most `8⌈L/16⌉` of the `2¹⁰⁶` clamped one-time keys permit.
 
     **The model.** These theorems quantify over the one-time poly key directly,
-    drawn uniformly from the clamped key space. In the real AEAD that key is
-    `derivePolyKey key nonce` — ChaCha20 keystream output — and "the derived
+    drawn uniformly from the clamped key space. In the AEAD construction that
+    key is `derivePolyKey key nonce` — ChaCha20 keystream output — and "the derived
     key is uniformly distributed" is precisely the ChaCha20-PRF *assumption*,
     which is computational and not provable in this development (see README).
     The chain to `decrypt` is `decrypt_accepts`: acceptance of a forged

@@ -1,14 +1,16 @@
 import LeanChachaPoly.Poly1305.Spec
 import LeanChachaPoly.Poly1305.Spec.Sum
-import Mathlib
+import Mathlib.Algebra.BigOperators.Fin
+import Mathlib.Tactic.NormNum.Ineq
+import Mathlib.Tactic.Positivity
 
 /-!
 # Poly1305 Tag Finalization
 
 The tag is `(accumulate + s) mod 2¹²⁸`, serialized to 16 bytes. `poly1305_value`
-shows the serialization is faithful (the tag *is* the reduced value), which is
-what lets `Poly1305.Security.poly1305_tag_forgery` reason about actual tag bytes:
-subtracting two tag equations cancels the one-time pad `s` exactly.
+shows the serialization is faithful (the tag *is* the reduced value); this is the
+link `Poly1305.Security.poly1305_tag_forgery` uses to reason at the level of tag
+bytes, where subtracting two tag equations cancels the one-time pad `s`.
 -/
 
 namespace Poly1305.Spec

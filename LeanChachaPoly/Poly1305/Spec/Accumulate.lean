@@ -1,5 +1,6 @@
 import LeanChachaPoly.Poly1305.Spec
-import Mathlib
+import Mathlib.Data.Nat.ModEq
+import Mathlib.Tactic.Ring
 
 /-!
 # Poly1305 Accumulation = Polynomial Evaluation

@@ -1,5 +1,6 @@
 import LeanChachaPoly.ChaCha20.Spec
-import Mathlib
+import Std.Tactic.BVDecide
+import Mathlib.Logic.Function.Basic
 
 /-!
 # ChaCha20 Quarter-Round is a Permutation

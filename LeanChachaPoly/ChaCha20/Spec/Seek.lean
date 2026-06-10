@@ -1,5 +1,8 @@
 import LeanChachaPoly.ChaCha20.Spec.Keystream
-import Mathlib
+import Mathlib.Algebra.Order.Group.Nat
+import Mathlib.Data.UInt
+import Mathlib.Data.Vector.Basic
+import Mathlib.Tactic.Ring
 
 /-!
 # ChaCha20 CTR Seekability

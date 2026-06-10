@@ -1,5 +1,8 @@
 import LeanChachaPoly.Poly1305.Spec
-import Mathlib
+import Mathlib.Algebra.BigOperators.Fin
+import Mathlib.Algebra.Order.BigOperators.Group.Finset
+import Mathlib.Algebra.Ring.GeomSum
+import Mathlib.Tactic.NormNum.Ineq
 
 /-!
 # Poly1305 Clamp matches RFC 8439 §2.5.1
@@ -16,8 +19,8 @@ exactly `128 − 22 = 106` of the 128 bits free, so its image has size `2¹⁰�
 (`clampImage_card`) — the denominator of the clamped Poly1305 forgery
 probability `8⌈L/16⌉ / 2¹⁰⁶` in `Poly1305.Security` — and every clamped value
 has exactly `2²²` preimages (`clamp_fiber_card`), so a uniform 16-byte `r`
-pushed through `clamp` is uniform on that key space (the probability model is
-the real key-generation procedure).
+pushed through `clamp` is uniform on that key space — the distribution assumed
+by the forgery probability is the one key generation produces.
 -/
 
 namespace Poly1305.Spec
@@ -44,8 +47,8 @@ private theorem mask_bit_char : ∀ j : Fin 128,
 
 /-- **Key lemma (RFC 8439 §2.5.1).** Complete bit-level characterization of clamping:
     the 22 RFC-named bits vanish in `clamp r`, and **every other bit of `r` is
-    preserved** — the mask does exactly what the RFC's byte-wise description says,
-    no more and no less. (Bits ≥ 128 are also clear: `clamp_lt`.) -/
+    preserved** — the mask realizes exactly the RFC's byte-wise description.
+    (Bits ≥ 128 are also clear: `clamp_lt`.) -/
 theorem clamp_rfc (r j : Nat) (hj : j < 128) :
     (clamp r).testBit j =
       if j ∈ clampClearedBits then false else r.testBit j := by
@@ -64,8 +67,8 @@ theorem clamp_rfc (r j : Nat) (hj : j < 128) :
     - `clamp_fiber_card`: every clamped value has exactly `2²²` preimages among
       the 128-bit inputs — so pushing a *uniform* 16-byte `r` through `clamp`
       gives the *uniform* distribution on the clamped key space (equal fibers),
-      and "drawing from `clampedKeys` uniformly" is the real key-generation
-      procedure, not a modeling choice.
+      and drawing uniformly from `clampedKeys` coincides with the key-generation
+      procedure.
 
     Both reduce to one generic count, `bitConstrained_card`: the numbers below
     `2ᴺ` whose bits are prescribed on a position set `Q` number `2^(N − #Q)`,
@@ -223,8 +226,8 @@ theorem clampImage_card :
     preimages among the 128-bit inputs: a preimage must agree with `y` on the
     mask's `106` set bits and is free on the `22` cleared ones. Equal fibers mean
     pushing a *uniform* 16-byte `r` through `clamp` yields the *uniform*
-    distribution on the `2¹⁰⁶` clamped keys — the probability model of
-    `poly1305_tag_forgery_prob` is the real key-generation procedure. -/
+    distribution on the `2¹⁰⁶` clamped keys — the distribution assumed by
+    `poly1305_tag_forgery_prob` is the one key generation produces. -/
 theorem clamp_fiber_card (y : Nat) (hy : y ∈ (Finset.range (2 ^ 128)).image clamp) :
     ((Finset.range (2 ^ 128)).filter (fun x => clamp x = y)).card = 2 ^ 22 := by
   obtain ⟨x₀, _, rfl⟩ := Finset.mem_image.mp hy

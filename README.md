@@ -3,7 +3,7 @@
 A machine-checked **Lean 4** verification of RFC 8439 **ChaCha20-Poly1305 AEAD** —
 the AEAD cipher suite preferred by TLS 1.3, WireGuard, and SSH.
 
-It verifies two complementary layers:
+It verifies three complementary layers:
 
 1. **Functional correctness** — the spec computes the right bytes (it matches the RFC
    test vectors) and `decrypt ∘ encrypt = id`.
@@ -11,6 +11,11 @@ It verifies two complementary layers:
    forger's success probability is bounded by `8⌈L/16⌉ / 2¹⁰⁶`. The bound is
    quantified over every possible attacker and rests on no computational assumption
    about the hash itself.
+3. **A verified fast implementation** — a `ByteArray`-based implementation
+   (`LeanChachaPoly/Fast/`) proved equal to the spec on *every* input
+   (`chacha20_eq_spec`, `poly1305_eq_spec`, `encrypt_eq_spec`, `decrypt_eq_spec`),
+   so the RFC vectors, the roundtrip theorem, and the forgery bounds all transfer
+   to the code you would actually run.
 
 Everything is `sorry`-free and rests on Lean/Mathlib's three foundational axioms
 (`propext`, `Classical.choice`, `Quot.sound`) — with a single, explicitly documented
@@ -19,7 +24,8 @@ exception (the `bv_decide` SAT-certificate axiom behind the quarter-round biject
 ```
 lake exe cache get      # fetch the matching Mathlib build
 lake build              # check every proof  (0 sorry)
-lake exe test           # run the RFC 8439 vectors + property checks
+lake exe test           # run the RFC 8439 vectors + property checks (spec AND fast)
+lake exe bench          # local throughput benchmarks, fast vs spec
 ```
 
 Lean toolchain `v4.29.1`, Mathlib pinned to match.
@@ -56,9 +62,27 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 | `decrypt_verifies` (+ `decrypt_accepts`) | `Aead/Security` | Verify-before-decrypt: plaintext is released only when the recomputed Poly1305 tag matches — acceptance of a forgery forces exactly the tag equation the forgery bound counts. |
 | `macData_inj` | `Aead/Security` | The RFC §2.8 length-framed MAC input is injective in `(aad, ciphertext)`, so any change to either changes the authenticated input. |
 
+### Fast implementation — equivalence bridges
+
+| Theorem | File | Statement |
+|---|---|---|
+| `chacha20_eq_spec` | `Fast/Bridge/ChaCha20` | The `ByteArray` ChaCha20 produces exactly the spec's bytes on every input. The round bridge never reasons about ARX semantics: the fast rounds apply the spec's `quarterRound` terms verbatim, so each position is a definitional "stuck match" identity — no `bv_decide`. |
+| `poly1305_eq_spec` | `Fast/Bridge/Poly1305` | The `ByteArray` Poly1305 produces exactly the spec's 16-byte tag on every input (the accumulation *is* `Spec.step`; the bridge is entirely about byte loads and blocking). |
+| `encrypt_eq_spec` / `decrypt_eq_spec` | `Fast/Bridge/Aead` | The fast AEAD equals the spec — including rejecting exactly the same forgeries — so the security capstones apply verbatim to the fast code. |
+| `decrypt_encrypt` (fast) | `Fast/Bridge/Aead` | The fast-side roundtrip, inherited from the spec capstone through the bridges. |
+
+The fast implementation is Mathlib-free (it links into the `test` and `bench`
+executables); the bridge proofs live in `Fast/Bridge/` and are compile-time only.
+Indicative local throughput (`lake exe bench`, Apple Silicon, 64 KiB messages):
+ChaCha20 ~207 MB/s fast vs ~14 MB/s spec; Poly1305 ~17 MB/s fast vs ~3 MB/s spec
+(the fast Poly1305 keeps the spec's GMP-`Nat` field arithmetic — replacing it with
+`UInt64`-limb arithmetic is the next planned step; see future work).
+
 The spec is directly executable: the test suite (`lake exe test`) runs it against the
-RFC 8439 vectors, and `Tests/AxiomGuard.lean` re-checks every capstone's axiom set at
-compile time (the build fails if one silently grows).
+RFC 8439 vectors, runs the same vectors through the fast implementation, and
+differentially checks fast against spec on block-boundary lengths;
+`Tests/AxiomGuard.lean` re-checks every capstone's axiom set at compile time (the
+build fails if one silently grows).
 
 ## How length/size invariants are encoded
 
@@ -88,7 +112,14 @@ LeanChachaPoly/
     Correctness.lean         decrypt_encrypt (the roundtrip)             ← capstone
     Security.lean            verify-before-decrypt → AEAD forgery bound  ← capstone
     Spec/{KeyDerivation, MacData}.lean
-Tests/                       RFC 8439 vectors + property checks + axiom guard
+  Fast/
+    Types.lean               BytesA n (ByteArray subtype) + spec conversions
+    ChaCha20.lean            unboxed 16-word state, ByteArray keystream/XOR
+    Poly1305.lean            offset-indexed block loads, Spec.step arithmetic
+    Aead.lean                fast AEAD composition
+    Bridge/{ByteList, ChaCha20, Poly1305, Aead}.lean   fast = spec      ← capstones
+Tests/                       RFC 8439 vectors (spec + fast) + differential + axiom guard
+Bench/                       lake exe bench — fast vs spec throughput
 ```
 
 Every theorem's doc-comment is tagged `**Capstone**`, `**Key lemma**`, or
@@ -137,13 +168,10 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   Both are *usage* constraints the types do not enforce; no theorem carries them as
   hypotheses.
 
-- **A verified fast implementation.** The spec itself is executable (the test suite runs
-  it against the RFC vectors), but it computes with `List UInt8` and bignum `Nat` — slow
-  by construction. No independently written, performance-oriented implementation
-  (`UInt64`-limb Poly1305, array-based ChaCha20) has been written and proved equal to the
-  spec; that is what an implementation-equivalence theorem would have to relate. And as for
-  any verified-then-compiled program, the Lean compiler and runtime executing the spec
-  are trusted.
+- **Compiler trust for execution.** The fast implementation is proved equal to the spec
+  as Lean functions; as for any verified-then-compiled program, the Lean compiler and
+  runtime executing it are trusted (the proofs are about the functions, not the emitted
+  machine code).
 
 ## Future work
 
@@ -152,6 +180,11 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   uniformly foundational — no `bv_decide` axiom.
 - Discharge `Nat.Prime (2¹³⁰ − 5)` (Pratt certificate) to make the security bounds
   unconditional.
+- **Phase B of the fast Poly1305**: replace the GMP-`Nat` field arithmetic with
+  poly1305-donna-style 5×26-bit `UInt64` limbs (delayed carries, lazy reduction),
+  bridged by swapping only the per-block step lemma — the byte-load and block-loop
+  bridges in `Fast/Bridge/Poly1305.lean` are reusable verbatim. This is where the
+  remaining order of magnitude of Poly1305 throughput lives.
 
 ## References
 

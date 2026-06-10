@@ -76,3 +76,24 @@ info: 'ChaCha20.Spec.quarterRound_bijective' depends on axioms: [propext,
 
 /-- info: 'Aead.Spec.aead_forgery_prob' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Aead.Spec.aead_forgery_prob
+
+/-! ## Fast implementation bridges
+
+The fast `ByteArray` implementation equals the spec on every input. These
+bridges use no `bv_decide` certificates and no native evaluation — only the
+three foundational axioms. -/
+
+/-- info: 'ChaCha20.Fast.chacha20_eq_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms ChaCha20.Fast.chacha20_eq_spec
+
+/-- info: 'Poly1305.Fast.poly1305_eq_spec' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Poly1305.Fast.poly1305_eq_spec
+
+/-- info: 'Aead.Fast.encrypt_eq_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Aead.Fast.encrypt_eq_spec
+
+/-- info: 'Aead.Fast.decrypt_eq_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Aead.Fast.decrypt_eq_spec
+
+/-- info: 'Aead.Fast.decrypt_encrypt' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Aead.Fast.decrypt_encrypt

@@ -126,6 +126,29 @@ Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · Properties
 - `lake exe test` — all RFC 8439 vector groups + property checks pass.
 - CI (`.github/workflows/ci.yml`) runs all of the above on every push.
 
+## Phase: verified fast implementation (2026-06)
+
+A `ByteArray`-based implementation under `LeanChachaPoly/Fast/` (Mathlib-free, linked
+into the executables), proved equal to the spec on every input:
+
+- **ChaCha20** — unboxed 16-field `UInt32` state (`St`), rounds reuse
+  `Spec.quarterRound` verbatim (inlined), keystream pushed into a
+  capacity-reserved `ByteArray`. Bridge `chacha20_eq_spec`: the round bridge is a
+  "stuck match" identity per quarter-round position (`Fast/Bridge/ChaCha20.lean`) —
+  no bit-vector reasoning, no `bv_decide`.
+- **Poly1305 (Phase A)** — message stays a `ByteArray`; 16-byte blocks loaded as two
+  `UInt64` words combined into a `Nat`; the accumulation reuses `Spec.step` (GMP
+  arithmetic) definitionally. Bridge `poly1305_eq_spec` via a little-endian valuation
+  `leVal` and a `fun_induction` aligned with `toBlockNats`.
+- **AEAD** — composition; bridges `encrypt_eq_spec` / `decrypt_eq_spec` and the
+  inherited fast-side `decrypt_encrypt`.
+- **Tests** — `Tests/FastTest.lean`: RFC vectors through the fast API + differential
+  fast-vs-spec at block-boundary lengths (LCG inputs).
+- **Bench** — `lake exe bench` (built in CI, run locally). Apple Silicon, 64 KiB:
+  ChaCha20 ~207 MB/s fast vs ~14 MB/s spec; Poly1305 ~17 MB/s vs ~3 MB/s.
+- All five bridge capstones are in the axiom guard with only the three foundational
+  axioms (`poly1305_eq_spec` even avoids `Classical.choice`).
+
 ## Future work
 
 - **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from
@@ -133,3 +156,6 @@ Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · Properties
   whole library uniformly foundational.
 - **Unconditional security.** Discharge `Nat.Prime (2¹³⁰ − 5)` via a Pratt certificate,
   removing the `[Fact (Nat.Prime P)]` hypothesis.
+- **Poly1305 Phase B.** poly1305-donna-style 5×26-bit `UInt64` limb arithmetic with
+  delayed carries; bridge by swapping only the per-block step lemma (the load and
+  block-loop bridges are reusable). The remaining order of magnitude of throughput.

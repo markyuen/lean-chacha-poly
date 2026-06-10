@@ -22,3 +22,9 @@ lean_lib Tests where
 @[default_target]
 lean_exe test where
   root := `Tests.Main
+
+/- Benchmarks: built by `lake build` (so CI keeps it compiling) but only run
+   locally via `lake exe bench`. Links only Mathlib-free modules. -/
+@[default_target]
+lean_exe bench where
+  root := `Bench.Main

@@ -59,7 +59,7 @@ def magic : Array UInt32 :=
 
 /-! ## Little-endian serialization -/
 
-def leToU32 (b0 b1 b2 b3 : UInt8) : UInt32 :=
+@[inline] def leToU32 (b0 b1 b2 b3 : UInt8) : UInt32 :=
   b0.toUInt32 ||| (b1.toUInt32 <<< 8)
               ||| (b2.toUInt32 <<< 16)
               ||| (b3.toUInt32 <<< 24)
@@ -73,11 +73,11 @@ def u32ToLe (w : UInt32) : Bytes 4 :=
 /-! ## Quarter round (RFC 8439 §2.1) -/
 
 /-- Left rotate a 32-bit word by n bits. -/
-def rotl32 (x : UInt32) (n : UInt32) : UInt32 :=
+@[inline] def rotl32 (x : UInt32) (n : UInt32) : UInt32 :=
   (x <<< n) ||| (x >>> (32 - n))
 
 /-- The core ARX mixing step. -/
-def quarterRound (a b c d : UInt32) : UInt32 × UInt32 × UInt32 × UInt32 :=
+@[inline] def quarterRound (a b c d : UInt32) : UInt32 × UInt32 × UInt32 × UInt32 :=
   let a := a + b; let d := rotl32 (d ^^^ a) 16
   let c := c + d; let b := rotl32 (b ^^^ c) 12
   let a := a + b; let d := rotl32 (d ^^^ a) 8

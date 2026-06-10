@@ -19,3 +19,11 @@ import LeanChachaPoly.Aead.Spec.KeyDerivation
 import LeanChachaPoly.Aead.Spec.MacData
 import LeanChachaPoly.Aead.Correctness
 import LeanChachaPoly.Aead.Security
+import LeanChachaPoly.Fast.Types
+import LeanChachaPoly.Fast.ChaCha20
+import LeanChachaPoly.Fast.Poly1305
+import LeanChachaPoly.Fast.Aead
+import LeanChachaPoly.Fast.Bridge.ByteList
+import LeanChachaPoly.Fast.Bridge.ChaCha20
+import LeanChachaPoly.Fast.Bridge.Poly1305
+import LeanChachaPoly.Fast.Bridge.Aead

@@ -39,7 +39,12 @@ Built the Poly1305 unforgeability argument as a tower:
    Field-ness needs `P` prime, taken as `[Fact (Nat.Prime P)]`.
 4. `poly1305_almost_delta_universal` + `collision_union_bound` + the ≤ 8 candidate count
    ⇒ `poly1305_byte_forgery`: the real byte-level bound `8·⌈L/16⌉`.
-5. `Injectivity.lean`: the `2^(8·len)` padding makes the byte→block encoding injective
+5. `clampImage_card` (`Spec/Clamp.lean`): the clamp mask leaves `128 − 22 = 106` bits
+   free, so the clamped key space has exactly `2¹⁰⁶` elements (a bit-counting bijection
+   between submasks and Boolean assignments to the free bits). Dividing the byte-level
+   count by it gives `poly1305_clamped_forgery_prob`: the published forgery probability
+   `8⌈L/16⌉ / 2¹⁰⁶`.
+6. `Injectivity.lean`: the `2^(8·len)` padding makes the byte→block encoding injective
    (`leVal_inj → blockToNat_inj/finalBlockToNat_inj → toBlocks_inj`), lifting the bound
    to distinct *messages*.
 
@@ -94,5 +99,3 @@ Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · Properties
   whole library uniformly foundational.
 - **Unconditional security.** Discharge `Nat.Prime (2¹³⁰ − 5)` via a Pratt certificate,
   removing the `[Fact (Nat.Prime P)]` hypothesis.
-- **Clamped probability.** Package the full-field bound as the explicit clamped
-  probability `8⌈L/16⌉ / 2¹⁰⁶`.

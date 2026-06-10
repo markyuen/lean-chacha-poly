@@ -2,6 +2,7 @@ import LeanChachaPoly.Poly1305.Spec
 import LeanChachaPoly.Poly1305.Spec.Sum
 import LeanChachaPoly.Poly1305.Spec.Blocking
 import LeanChachaPoly.Poly1305.Spec.Accumulate
+import LeanChachaPoly.Poly1305.Spec.Clamp
 import Mathlib
 
 /-!
@@ -502,5 +503,57 @@ theorem poly1305_almost_universal_msg [Fact (Nat.Prime P)] (M M' : List UInt8)
   rw [blockNats_toBlocks, blockNats_toBlocks] at hne ⊢
   exact poly1305_almost_universal (toBlockNats M) (toBlockNats M')
     (toBlockNats_pos M) (toBlockNats_pos M') hne
+
+/-! ## The clamped forgery probability `8⌈L/16⌉ / 2¹⁰⁶`
+
+    The byte-level bound above counts keys `r` over the *whole* field `ZMod P`.
+    The real Poly1305 key `r` is uniform over the `2¹⁰⁶` clamped 128-bit values
+    (`Poly1305.Spec.clampImage_card`). Restricting the count to that subset and
+    dividing by its size turns the combinatorial bound into the published
+    information-theoretic forgery probability. -/
+
+/-- The clamped Poly1305 key component `r`, as it ranges (in the field) over all
+    clamped 128-bit values. `clampedKeys_card` shows this set has size `2¹⁰⁶`. -/
+noncomputable def clampedKeys : Finset (ZMod P) :=
+  (Finset.range (2 ^ 128)).image (fun x => ((clamp x : Nat) : ZMod P))
+
+/-- **Key lemma.** The clamped key set has exactly `2¹⁰⁶` field elements: the
+    `2¹⁰⁶` clamped `Nat` values (`clampImage_card`) stay distinct in `ZMod P`
+    because each is `< 2¹²⁸ < P`, so the cast is injective on them. -/
+theorem clampedKeys_card : clampedKeys.card = 2 ^ 106 := by
+  have hPlt : (2 : Nat) ^ 128 < P := by unfold P; norm_num
+  unfold clampedKeys
+  rw [show (fun x => ((clamp x : Nat) : ZMod P)) = (fun n : Nat => (n : ZMod P)) ∘ clamp from rfl,
+      ← Finset.image_image, Finset.card_image_of_injOn, clampImage_card]
+  intro a ha b hb hab
+  simp only [Finset.mem_coe, Finset.mem_image, Finset.mem_range] at ha hb
+  obtain ⟨xa, _, rfl⟩ := ha
+  obtain ⟨xb, _, rfl⟩ := hb
+  exact cast_inj_of_lt (lt_trans (clamp_lt xa) hPlt) (lt_trans (clamp_lt xb) hPlt) hab
+
+/-- **Capstone.** The clamped Poly1305 forgery probability. Drawing the key `r`
+    uniformly from the `2¹⁰⁶` clamped values, the fraction that let a forger hit a
+    fixed tag offset `Δ mod 2¹²⁸` is at most `8·max #blocks / 2¹⁰⁶` — the published
+    `8⌈L/16⌉ / 2¹⁰⁶` Poly1305 bound. The numerator carries from the full-field count
+    (`poly1305_byte_forgery`): the bad clamped keys are a subset of the bad field
+    keys, so clamping never *adds* forgeries; the denominator is `clampedKeys_card`. -/
+theorem poly1305_clamped_forgery_prob [Fact (Nat.Prime P)] (B B' : List Nat)
+    (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
+    (hne : B ≠ B') (Δ : ℤ) :
+    ((clampedKeys.filter (fun r : ZMod P =>
+        (((msgPoly B).eval r).val : ℤ) - ((msgPoly B').eval r).val ≡ Δ [ZMOD 2 ^ 128])).card : ℝ)
+      / clampedKeys.card
+      ≤ (8 * max B.length B'.length : ℝ) / 2 ^ 106 := by
+  have hbad : (clampedKeys.filter (fun r : ZMod P =>
+      (((msgPoly B).eval r).val : ℤ) - ((msgPoly B').eval r).val ≡ Δ [ZMOD 2 ^ 128])).card
+      ≤ 8 * max B.length B'.length :=
+    calc (clampedKeys.filter _).card
+        ≤ (Finset.univ.filter (fun r : ZMod P =>
+            (((msgPoly B).eval r).val : ℤ) - ((msgPoly B').eval r).val ≡ Δ [ZMOD 2 ^ 128])).card :=
+          Finset.card_le_card (Finset.filter_subset_filter _ (Finset.subset_univ _))
+      _ ≤ 8 * max B.length B'.length := poly1305_byte_forgery B B' hpos hpos' hne Δ
+  rw [clampedKeys_card, Nat.cast_pow, Nat.cast_ofNat]
+  gcongr
+  exact_mod_cast hbad
 
 end Poly1305.Spec

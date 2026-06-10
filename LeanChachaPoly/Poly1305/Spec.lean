@@ -27,7 +27,7 @@ polynomial evaluation in GF(2¹³⁰ - 5).
   Poly1305.Spec.Blocking   ← block-value bounds, toBlocks ↔ toBlockNats
   Poly1305.Spec.Accumulate ← accumulation = polynomial evaluation  (key lemma)
   Poly1305.Spec.Tag        ← tag serialization round-trip / value
-  Poly1305.Spec.Clamp      ← clamp matches RFC §2.5.1
+  Poly1305.Spec.Clamp      ← clamp matches RFC §2.5.1; clamped key space = 2¹⁰⁶
 
 ## Typing convention
 

@@ -11,7 +11,6 @@ The counter indexes 64-byte blocks consistently.
 
 namespace ChaCha20.Spec
 
-set_option maxHeartbeats 2000000 in
 /-- **Supporting.** The keystream from counter `ctr + offset` over `len` bytes is the tail
     (after `offset·64` bytes) of the keystream from `ctr` over `len + offset·64`
     bytes. Dropping `offset·64` bytes = skipping `offset` whole 64-byte blocks. -/

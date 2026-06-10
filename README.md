@@ -29,7 +29,9 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 
 | Theorem | File | Statement |
 |---|---|---|
+| `poly1305_clamped_forgery_prob` | `Poly1305/Security` | The clamped forgery **probability**: with `r` drawn uniformly from the `2¹⁰⁶` clamped keys, a forger targeting a fixed tag offset succeeds with probability at most **`8⌈L/16⌉ / 2¹⁰⁶`** — the published Poly1305 ε. |
 | `poly1305_byte_forgery` | `Poly1305/Security` | The real byte-level bound: a forger targeting a fixed tag offset succeeds for at most **`8·⌈L/16⌉`** keys — the famous Poly1305 factor. |
+| `clampImage_card` | `Poly1305/Spec/Clamp` | The clamped key space has exactly `2¹⁰⁶` elements (clamping leaves `128−22` bits free) — the denominator of the ε bound, by a bit-counting bijection. |
 | `poly1305_almost_universal` | `Poly1305/Security` | Almost-universal hashing over the field `ZMod P`: two distinct block-lists collide for at most `max #blocks` keys `r` (root-counting on a nonzero difference polynomial). |
 | `toBlocks_inj` / `poly1305_almost_universal_msg'` | `Poly1305/Injectivity` | The `2^(8·len)` padding makes the message→block encoding injective, lifting the bound from block-lists to **distinct messages**. |
 | `accumulate_eq_poly` | `Poly1305/Spec/Accumulate` | The iterative MAC loop **is** polynomial evaluation in `GF(2¹³⁰−5)` — the bridge the whole security argument rests on. |
@@ -114,11 +116,6 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   everything else is axiom-clean. An algebraic reproof (from the rotate/XOR invertibility
   lemmas already present) would remove it — see future work.
 
-- **The clamped key distribution.** The forgery bound is proved over the *full* field
-  `ZMod P`. Poly1305 clamps `r`, restricting it to a ~2¹⁰⁶ subset; the bound still holds
-  on a subset, but the exact clamped ε-probability (`8⌈L/16⌉ / 2¹⁰⁶`) is not formalized —
-  the combinatorial bound is, the probability packaging is presentational.
-
 - **Constant-time / side-channel resistance.** The proofs are about input→output values;
   they say nothing about timing, caches, or power. Constant-time execution is a
   compiler/hardware property outside Lean's evaluation model.
@@ -138,7 +135,6 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   uniformly foundational — no `bv_decide` axiom.
 - Discharge `Nat.Prime (2¹³⁰ − 5)` (Pratt certificate) to make the security bounds
   unconditional.
-- Package the field bound as the explicit clamped probability `8⌈L/16⌉ / 2¹⁰⁶`.
 
 ## References
 
@@ -146,5 +142,5 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 - D. J. Bernstein, *ChaCha, a variant of Salsa20* (2008)
 - D. J. Bernstein, *The Poly1305-AES message-authentication code* (2005)
 - [primefactor-io/xchacha20-poly1305](https://github.com/primefactor-io/xchacha20-poly1305)
-  — the Go implementation whose test suite the RFC 8439 vectors in `Tests/` are ported
-  1:1 from.
+  — the `Tests/` suite is a 1:1 port of this Go implementation's test files (the RFC 8439
+  vectors themselves are from the RFC).

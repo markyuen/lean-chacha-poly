@@ -141,6 +141,20 @@ def runTests : IO Unit := do
       results := results.push (← checkBool name ok)
     return results.toList
 
+  group "fused vs two-pass" do
+    -- The fused chacha20 must agree with the retained two-pass composition
+    -- across block-boundary lengths (hits all three chacha20Go cases).
+    -- Proved by chacha20_eq_twoPass; this exercises the compiled paths.
+    let fk := fastKey (ChaCha20.Spec.Key.ofBytes? (randList 21 32)).get!
+    let fn := fastNonce (ChaCha20.Spec.Nonce.ofBytes? (randList 22 12)).get!
+    let mut results := #[]
+    for len in diffLengths do
+      let msgBA := (randList (UInt64.ofNat (4000 + len)) len).toByteArray
+      let ok := ChaCha20.Fast.chacha20 fk fn 7 msgBA
+        == ChaCha20.Fast.xorBytes msgBA (ChaCha20.Fast.keystream fk fn 7 msgBA.size)
+      results := results.push (← checkBool s!"len {len}" ok)
+    return results.toList
+
   group "differential fast vs spec" do
     let specKey := (ChaCha20.Spec.Key.ofBytes? (randList 1 32)).get!
     let specNonce := (ChaCha20.Spec.Nonce.ofBytes? (randList 2 12)).get!

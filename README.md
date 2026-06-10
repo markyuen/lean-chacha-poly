@@ -84,10 +84,16 @@ The Phase A GMP-`Nat` engine is retained as `accumulateNat` with its own
 spec-equivalence theorem (`accumulateNat_eq`) and the corollary that the two
 engines agree on every input (`accumulate_eq_accumulateNat`).
 
+The fast ChaCha20 is a fused single pass: each 64-byte block is computed in
+registers and XORed directly against the message — no intermediate keystream
+buffer. The two-pass composition (`xorBytes` + `keystream`) is retained (the
+key derivation needs `keystream`) with the corollary that the two engines
+agree on every input (`chacha20_eq_twoPass`).
+
 Indicative local throughput (`lake exe bench`, Apple Silicon, 64 KiB messages):
-ChaCha20 ~205 MB/s fast vs ~14 MB/s spec; Poly1305 ~1.1 GB/s fast (limb engine)
-vs ~16 MB/s for the retained Nat engine vs ~3 MB/s spec; AEAD ~170 MB/s fast
-vs ~2 MB/s spec.
+ChaCha20 ~295 MB/s fast (fused) vs ~200 MB/s for the retained two-pass vs
+~14 MB/s spec; Poly1305 ~1.1 GB/s fast (limb engine) vs ~16 MB/s for the
+retained Nat engine vs ~3 MB/s spec; AEAD ~230 MB/s fast vs ~2 MB/s spec.
 
 The spec is directly executable: the test suite (`lake exe test`) runs it against the
 RFC 8439 vectors, runs the same vectors through the fast implementation, and
@@ -125,7 +131,7 @@ LeanChachaPoly/
     Spec/{KeyDerivation, MacData}.lean
   Fast/
     Types.lean               BytesA n (ByteArray subtype) + spec conversions
-    ChaCha20.lean            unboxed 16-word state, ByteArray keystream/XOR
+    ChaCha20.lean            unboxed 16-word state, fused keystream-XOR pass
     Poly1305.lean            5×26-bit UInt64 limb engine (+ Nat-engine baseline)
     Aead.lean                fast AEAD composition
     Bridge/{ByteList, ChaCha20, Poly1305, Poly1305Limb, Aead}.lean  fast = spec  ← capstones
@@ -191,9 +197,10 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   uniformly foundational — no `bv_decide` axiom.
 - Discharge `Nat.Prime (2¹³⁰ − 5)` (Pratt certificate) to make the security bounds
   unconditional.
-- Vectorize/fuse the fast ChaCha20 (now the AEAD bottleneck at ~205 MB/s vs the
-  limb Poly1305's ~1.1 GB/s): a fused keystream-XOR pass and `USize` indexing are
-  the remaining scalar wins; SIMD is outside Lean's current reach.
+- Speed up the fast ChaCha20 further (still the AEAD bottleneck at ~295 MB/s
+  vs the limb Poly1305's ~1.1 GB/s): the keystream-XOR pass is now fused;
+  reducing per-block allocation in the round function is the remaining scalar
+  win; SIMD is outside Lean's current reach.
 
 ## References
 

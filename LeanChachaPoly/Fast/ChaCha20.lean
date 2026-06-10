@@ -10,9 +10,12 @@ A compiled-speed ChaCha20 over `ByteArray`:
 - The round mixing reuses `ChaCha20.Spec.quarterRound` *verbatim* (inlined),
   so the fast and spec round functions contain literally the same ARX terms —
   the bridge proof never reasons about ARX semantics.
-- Keystream bytes are pushed into a capacity-reserved `ByteArray`
-  (`ByteArray.push` into reserved capacity is an in-place O(1) write), and
-  XOR is a single indexed pass.
+- Encryption is a fused single pass: each 64-byte block is computed in
+  registers and XORed directly against the message into a capacity-reserved
+  `ByteArray` (`ByteArray.push` into reserved capacity is an in-place O(1)
+  write) — no intermediate keystream buffer. The two-pass composition
+  (`xorBytes` + `keystream`) is retained for `derivePolyKey` and as the
+  differential baseline.
 
 Equivalence with `ChaCha20.Spec.chacha20` is proved in
 `LeanChachaPoly.Fast.Bridge.ChaCha20` (`chacha20_eq_spec`).
@@ -145,10 +148,72 @@ where
   termination_by min a.size b.size - i
   decreasing_by omega
 
-/-- Encrypt or decrypt a message. -/
+/-! ## Fused keystream-XOR pass
+
+Computes each 64-byte block in registers and XORs it directly against the
+message bytes, writing the output once — no intermediate keystream buffer.
+The two-pass composition (`xorBytes` of a materialized `keystream`) is
+retained above; `chacha20_eq_twoPass` proves the engines agree. -/
+
+/-- Push 4 message bytes XORed with the little-endian bytes of `w`. -/
+@[inline] def pushXor4 (acc : ByteArray) (w : UInt32) (m : ByteArray) (i : Nat)
+    (h : i + 4 ≤ m.size) : ByteArray :=
+  (((acc.push ((m[i]'(by omega)) ^^^ w.toUInt8)).push
+    ((m[i + 1]'(by omega)) ^^^ (w >>> 8).toUInt8)).push
+    ((m[i + 2]'(by omega)) ^^^ (w >>> 16).toUInt8)).push
+    ((m[i + 3]'(by omega)) ^^^ (w >>> 24).toUInt8)
+
+/-- Push 64 message bytes at `off` XORed with the serialized state `s`. -/
+def pushBlockXor (acc : ByteArray) (s : St) (m : ByteArray) (off : Nat)
+    (h : off + 64 ≤ m.size) : ByteArray :=
+  let acc := pushXor4 acc s.x0  m off        (by omega)
+  let acc := pushXor4 acc s.x1  m (off + 4)  (by omega)
+  let acc := pushXor4 acc s.x2  m (off + 8)  (by omega)
+  let acc := pushXor4 acc s.x3  m (off + 12) (by omega)
+  let acc := pushXor4 acc s.x4  m (off + 16) (by omega)
+  let acc := pushXor4 acc s.x5  m (off + 20) (by omega)
+  let acc := pushXor4 acc s.x6  m (off + 24) (by omega)
+  let acc := pushXor4 acc s.x7  m (off + 28) (by omega)
+  let acc := pushXor4 acc s.x8  m (off + 32) (by omega)
+  let acc := pushXor4 acc s.x9  m (off + 36) (by omega)
+  let acc := pushXor4 acc s.x10 m (off + 40) (by omega)
+  let acc := pushXor4 acc s.x11 m (off + 44) (by omega)
+  let acc := pushXor4 acc s.x12 m (off + 48) (by omega)
+  let acc := pushXor4 acc s.x13 m (off + 52) (by omega)
+  let acc := pushXor4 acc s.x14 m (off + 56) (by omega)
+  pushXor4 acc s.x15 m (off + 60) (by omega)
+
+/-- XOR the message tail `[off, m.size)` against the keystream bytes `ks`
+    (truncating to the shorter), appended to `acc`. -/
+def tailXor (acc : ByteArray) (m : ByteArray) (off : Nat) (ks : ByteArray) :
+    ByteArray :=
+  go 0 acc
+where
+  go (j : Nat) (acc : ByteArray) : ByteArray :=
+    if h : off + j < m.size ∧ j < ks.size then
+      go (j + 1) (acc.push ((m[off + j]'h.1) ^^^ (ks[j]'h.2)))
+    else acc
+  termination_by m.size - (off + j)
+  decreasing_by omega
+
+/-- The fused encryption loop: full 64-byte blocks are XORed in place via
+    `pushBlockXor`; a trailing partial block serializes one scratch block and
+    XORs the tail. -/
+def chacha20Go (key : Key) (nonce : Nonce) (m : ByteArray) (ctr : UInt32)
+    (off : Nat) (acc : ByteArray) : ByteArray :=
+  if h : off + 64 ≤ m.size then
+    chacha20Go key nonce m (ctr + 1) (off + 64)
+      (pushBlockXor acc (block key nonce ctr) m off h)
+  else if off < m.size then
+    tailXor acc m off (pushBlock (ByteArray.emptyWithCapacity 64) (block key nonce ctr))
+  else acc
+  termination_by m.size - off
+  decreasing_by omega
+
+/-- Encrypt or decrypt a message (fused single pass). -/
 def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
     (msg : ByteArray) : ByteArray :=
-  xorBytes msg (keystream key nonce counter msg.size)
+  chacha20Go key nonce msg counter 0 (ByteArray.emptyWithCapacity msg.size)
 
 /-! ## Size facts (core-only, needed for subtype proofs downstream) -/
 

@@ -176,6 +176,33 @@ AEAD bridge, AxiomGuard, and vector tests needed zero changes.
 - Bench (Apple Silicon): Poly1305 1.09–1.19 GB/s at 64 KiB–1 MiB (~70× Phase A,
   ~14 ns/block); AEAD 168–171 MB/s (from 15), now ChaCha20-bound.
 
+## Phase C: fused ChaCha20 keystream-XOR pass (2026-06)
+
+`chacha20` replaced by a fused single pass (`chacha20Go` in `Fast/ChaCha20.lean`):
+each 64-byte block is computed in registers and XORed directly against the
+message (`pushBlockXor` = 16 unrolled `pushXor4`; trailing partial block via
+`tailXor` against one serialized scratch block) — no intermediate keystream
+buffer. The two-pass composition (`xorBytes` + `keystream`) survives — the
+key derivation needs `keystream` — with the engines-agree corollary
+`chacha20_eq_twoPass` (differential test + bench baseline). Capstone
+`chacha20_eq_spec` kept its name, statement, and pinned axiom set
+`[propext, Classical.choice, Quot.sound]`, so the AEAD bridge, AxiomGuard,
+and vector tests needed zero changes.
+
+- Bridge (new fused-pass section of `Fast/Bridge/ChaCha20.lean`, still
+  Mathlib-free): peel the spec keystream one block at a time
+  (`keystream_block_cons`; bind the serialized-block length as a
+  universally-quantified `have` first — instantiating `.property` with a
+  metavariable inside `simp` whnf-times-out), split the spec XOR along the
+  64-byte seams (`zipWith_block_split`, and `zipWith_seg` with explicit
+  equation parameters so offsets stay in flat `off + 4k` form), match each
+  4-byte `pushXor4` against one serialized word (`slice4_eq` peel), and close
+  the main `fun_induction` by staging the split in a targeted `have` — no
+  `congr` anywhere. `zipWith_take_right` (zipWith truncation) is not in
+  core/Mathlib; proved by structural recursion.
+- Bench (Apple Silicon): ChaCha20 ~295 MB/s at 1 KiB–1 MiB (~1.5× the retained
+  two-pass ~200 MB/s); AEAD 231–238 MB/s (from 168–171), still ChaCha20-bound.
+
 ## Future work
 
 - **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from
@@ -183,5 +210,7 @@ AEAD bridge, AxiomGuard, and vector tests needed zero changes.
   whole library uniformly foundational.
 - **Unconditional security.** Discharge `Nat.Prime (2¹³⁰ − 5)` via a Pratt certificate,
   removing the `[Fact (Nat.Prime P)]` hypothesis.
-- **Faster ChaCha20.** Now the AEAD bottleneck (~205 MB/s vs limb Poly1305's
-  ~1.1 GB/s): fused keystream-XOR pass, `USize` indexing.
+- **Faster ChaCha20.** Still the AEAD bottleneck (~295 MB/s vs limb Poly1305's
+  ~1.1 GB/s): the remaining scalar win is per-block allocation in the round
+  function (each `quarterRound` allocates nested pairs, each `doubleRound` a
+  fresh `St`).

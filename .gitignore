@@ -1,2 +1,8 @@
 # cache and other artifacts produced by Lean's Lake build tool
 .lake/
+
+# macOS noise
+.DS_Store
+
+# local scratch / experiments (not part of the artifact)
+tmp/

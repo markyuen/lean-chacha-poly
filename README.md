@@ -29,13 +29,14 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 
 | Theorem | File | Statement |
 |---|---|---|
-| `poly1305_clamped_forgery_prob` | `Poly1305/Security` | The clamped forgery **probability**: with `r` drawn uniformly from the `2¹⁰⁶` clamped keys, a forger targeting a fixed tag offset succeeds with probability at most **`8⌈L/16⌉ / 2¹⁰⁶`** — the published Poly1305 ε. |
-| `poly1305_byte_forgery` | `Poly1305/Security` | The real byte-level bound: a forger targeting a fixed tag offset succeeds for at most **`8·⌈L/16⌉`** keys — the famous Poly1305 factor. |
-| `clampImage_card` | `Poly1305/Spec/Clamp` | The clamped key space has exactly `2¹⁰⁶` elements (clamping leaves `128−22` bits free) — the denominator of the ε bound, by a bit-counting bijection. |
+| `poly1305_tag_forgery_prob` | `Poly1305/Security` | **The headline.** The published Poly1305 forgery probability, about the real `poly1305` function and real 16-byte tags: with `r` uniform over the `2¹⁰⁶` clamped keys, turning an observed tag on `M` into a tag on `M' ≠ M` succeeds with probability at most **`8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`** — `⌈L/16⌉` literally as `(L+15)/16`. The one-time pad `s` is *proved* to cancel between the two tag equations, not argued in prose. |
+| `poly1305_tag_forgery` | `Poly1305/Security` | The counting form: at most `8⌈L/16⌉` clamped keys admit any pad `s` producing the observed/forged tag pair. |
+| `poly1305_byte_forgery` | `Poly1305/Security` | The byte-level engine: a forger targeting a fixed accumulator offset mod `2¹²⁸` succeeds for at most `8 · max #blocks` keys — the famous `8` from the ≤ 8 integer candidates per offset. |
+| `clampImage_card` / `clamp_fiber_card` | `Poly1305/Spec/Clamp` | The clamped key space has exactly `2¹⁰⁶` elements (the ε denominator), and every clamped value has exactly `2²²` preimages — so uniform 16-byte `r` through `clamp` *is* uniform on the clamped keys (the probability model is the real key-generation procedure). |
 | `poly1305_almost_universal` | `Poly1305/Security` | Almost-universal hashing over the field `ZMod P`: two distinct block-lists collide for at most `max #blocks` keys `r` (root-counting on a nonzero difference polynomial). |
-| `toBlocks_inj` / `poly1305_almost_universal_msg'` | `Poly1305/Injectivity` | The `2^(8·len)` padding makes the message→block encoding injective, lifting the bound from block-lists to **distinct messages**. |
+| `toBlocks_inj` (→ `poly1305_almost_universal_msg'`) | `Poly1305/Injectivity` (→ `Security`) | The `2^(8·len)` padding makes the message→block encoding injective, lifting the bound from block-lists to **distinct messages**. |
 | `accumulate_eq_poly` | `Poly1305/Spec/Accumulate` | The iterative MAC loop **is** polynomial evaluation in `GF(2¹³⁰−5)` — the bridge the whole security argument rests on. |
-| `poly1305_value` | `Poly1305/Spec/Tag` | The 16-byte tag reads back as exactly `(accumulate + s) mod 2¹²⁸` (serialization is faithful, not lossy). |
+| `poly1305_value` | `Poly1305/Spec/Tag` | The 16-byte tag reads back as exactly `(accumulate + s) mod 2¹²⁸` (serialization is faithful, not lossy) — what lets the forgery bound speak about actual tag bytes. |
 
 ### ChaCha20 — correctness & structure
 
@@ -49,13 +50,14 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 
 | Theorem | File | Statement |
 |---|---|---|
+| `aead_forgery_prob` | `Aead/Security` | **Where the towers meet.** With the one-time poly key uniform over the clamped keys (the ChaCha20-PRF idealization — the one computational assumption, stated as a hypothesis), an attacker who modifies `(aad, ciphertext)` produces an accepted forgery with probability at most `8·max ⌈L/16⌉ ⌈L'/16⌉ / 2¹⁰⁶` over the `macData` lengths. |
 | `decrypt_encrypt` | `Aead/Correctness` | The roundtrip: `decrypt (encrypt pt aad) aad = some pt`. |
-| `decrypt_verifies` | `Aead/Security` | Verify-before-decrypt: plaintext is released only when the recomputed Poly1305 tag matches — there is no path that leaks plaintext on an authentication failure. |
-| `macData_inj` (+ `macData_aad_binding`, `macData_ct_binding`) | `Aead/Security` | The RFC §2.8 length-framed MAC input is injective in `(aad, ciphertext)`, so any change to either changes the authenticated input. |
+| `decrypt_verifies` (+ `decrypt_accepts`) | `Aead/Security` | Verify-before-decrypt: plaintext is released only when the recomputed Poly1305 tag matches — acceptance of a forgery forces exactly the tag equation the forgery bound counts. |
+| `macData_inj` | `Aead/Security` | The RFC §2.8 length-framed MAC input is injective in `(aad, ciphertext)`, so any change to either changes the authenticated input. |
 
-Each primitive also has a **`Native`** module proving the executable `ByteArray`
-implementation equals the `List UInt8` spec (`chacha20_eq_spec`, `poly1305_eq_spec`,
-`encrypt_eq_spec`/`decrypt_eq_spec`), so every spec theorem transfers to runnable code.
+The spec is directly executable: the test suite (`lake exe test`) runs it against the
+RFC 8439 vectors, and `Tests/AxiomGuard.lean` re-checks every capstone's axiom set at
+compile time (the build fails if one silently grows).
 
 ## How length/size invariants are encoded
 
@@ -73,26 +75,23 @@ LeanChachaPoly/
   Subtypes.lean              Bytes n / Words n / Padded  (length-indexed types)
   ChaCha20/
     Spec.lean                definitions
-    Correctness.lean         chacha20_involutive / chacha20_length      ← capstone
-    Native.lean              ByteArray bridge
+    Correctness.lean         chacha20_involutive / chacha20_length       ← capstone
     Spec/{QuarterRound, Keystream, Seek, Permutation, Xor}.lean
   Poly1305/
     Spec.lean                definitions + basic properties
-    Security.lean            almost-universal / byte-level forgery bound ← capstone
+    Security.lean            security tower → tag-level forgery prob     ← capstone
     Injectivity.lean         block-encoding injectivity → toBlocks_inj   ← capstone
-    Native.lean              ByteArray bridge
     Spec/{Sum, Blocking, Accumulate, Tag, Clamp}.lean
   Aead/
     Spec.lean                construction (encrypt / decrypt)
     Correctness.lean         decrypt_encrypt (the roundtrip)             ← capstone
-    Security.lean            verify-before-decrypt, macData injectivity  ← capstone
-    Native.lean              ByteArray bridge
+    Security.lean            verify-before-decrypt → AEAD forgery bound  ← capstone
     Spec/{KeyDerivation, MacData}.lean
-Tests/                       RFC 8439 vectors + property checks
+Tests/                       RFC 8439 vectors + property checks + axiom guard
 ```
 
-Every theorem's doc-comment is tagged `**Capstone.**`, `**Key lemma.**`, or
-`**Supporting.**` so its importance is visible at a glance.
+Every theorem's doc-comment is tagged `**Capstone**`, `**Key lemma**`, or
+`**Supporting**` so its importance is visible at a glance.
 
 ## What is NOT covered (and why)
 
@@ -103,30 +102,47 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   random" is a *computational* assumption requiring a probabilistic game framework
   (adversaries, advantage, reductions). It is not a theorem one can prove in plain Lean
   about the function — it is out of scope by nature. What *is* proved is the structural
-  fact (`quarterRound_bijective`) that ChaCha20 is permutation-based.
+  fact (`quarterRound_bijective`) that ChaCha20 is permutation-based. The AEAD forgery
+  bound (`aead_forgery_prob`) isolates this assumption as its model hypothesis: it
+  quantifies over a uniform one-time poly key, which is exactly what the PRF assumption
+  would supply for `derivePolyKey`.
 
 - **Primality of `P = 2¹³⁰ − 5`.** The field-level forgery bounds need `ZMod P` to be a
   field, i.e. `P` prime. That 40-digit primality is *assumed* as a hypothesis
   `[Fact (Nat.Prime P)]`, not discharged (it needs a Pratt certificate). The security
-  theorems are therefore conditional on this standard, well-known fact.
+  theorems are therefore conditional statements; no `Fact` instance is provided anywhere
+  in the repo, so they cannot even be *instantiated* until the certificate lands — an
+  honest reflection of the one remaining mathematical debt.
 
-- **One trusted axiom.** `quarterRound_bijective` (and its two round-trips) are proved by
-  `bv_decide`, which validates a SAT/LRAT certificate via the native compiler — the same
-  trust tier as `native_decide`. This is the library's *only* non-foundational axiom;
-  everything else is axiom-clean. An algebraic reproof (from the rotate/XOR invertibility
-  lemmas already present) would remove it — see future work.
+- **One trusted axiom.** `quarterRound_bijective` (and its two round-trips) are proved
+  by `bv_decide`. The SAT solver itself is *untrusted* — it must produce an LRAT
+  certificate, which a checker *formally verified in Lean* validates. The trust enters
+  at one point: that checker is run as natively compiled code rather than by the kernel
+  (infeasible at this size), so the Lean compiler/runtime joins the trusted base for
+  exactly that one Boolean evaluation — recorded as a per-theorem axiom of the form
+  `…bv_decide.ax` ("the verified checker returned `true` on this certificate"), pinned
+  by the axiom guard. An algebraic reproof (from the rotate/XOR invertibility lemmas
+  already present) would remove even that — see future work.
 
 - **Constant-time / side-channel resistance.** The proofs are about input→output values;
-  they say nothing about timing, caches, or power. Constant-time execution is a
-  compiler/hardware property outside Lean's evaluation model.
+  they say nothing about timing, caches, or power. One spot deserves a name: `decrypt`'s
+  tag check (`recvTag == expTag.val`) is a short-circuiting comparison — the classic MAC
+  timing leak if executed as written. Constant-time execution is a compiler/hardware
+  property outside Lean's evaluation model.
 
-- **Nonce-reuse safety.** Reusing a `(key, nonce)` pair is catastrophic for Poly1305.
-  This is a *usage* constraint the types cannot enforce; the library proves correctness
-  *given* a fresh nonce.
+- **Nonce-reuse safety and message-length limits.** Reusing a `(key, nonce)` pair is
+  catastrophic for Poly1305, and the 32-bit block counter wraps on messages over
+  `2³² · 64` bytes ≈ 256 GiB (`keystream`'s docstring), silently reusing keystream.
+  Both are *usage* constraints the types do not enforce; no theorem carries them as
+  hypotheses.
 
-- **The runtime below the bridge.** The `Native` modules prove the `ByteArray`
-  implementation equals the spec; the Lean compiler and runtime that then execute it are
-  trusted (as they are for any verified-then-compiled program).
+- **A verified fast implementation.** The spec itself is executable (the test suite runs
+  it against the RFC vectors), but it computes with `List UInt8` and bignum `Nat` — slow
+  by construction. No independently written, performance-oriented implementation
+  (`UInt64`-limb Poly1305, array-based ChaCha20) has been written and proved equal to the
+  spec; that is where a real implementation-equivalence theorem would live. And as for
+  any verified-then-compiled program, the Lean compiler and runtime executing the spec
+  are trusted.
 
 ## Future work
 

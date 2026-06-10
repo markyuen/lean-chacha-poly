@@ -21,8 +21,11 @@ Defined the three primitives over `List UInt8` and proved the functional capston
 - AEAD: `decrypt_encrypt` (the roundtrip) by algebraic assembly — `encrypt` emits
   `ct ‖ tag`, `decrypt` splits it, recomputes the same tag, and re-applies the ChaCha20
   involution.
-- **Native bridges**: a `ByteArray` implementation per primitive, proved equal to the
-  spec (`*_eq_spec`), so every spec theorem transfers to executable code.
+- **Native bridges** (since removed): a `ByteArray` wrapper per primitive with
+  `*_eq_spec` theorems. An external audit later found these definitional — the wrapper
+  *was* the spec, so the bridge theorems were tautologies — and the layer was deleted
+  (see Stage 5). A real implementation-equivalence theorem awaits an independently
+  written fast implementation.
 
 Validated against the RFC 8439 test vectors (`Tests/`).
 
@@ -68,29 +71,59 @@ length in the type. The analytic security tower was preserved behind a `blockNat
   "declared in Spec, proved elsewhere" split and the empty `Block.lean`.
 - **Dedup / prune.** One shared `foldl_add_eq_sum` (was copied 4×); removed `rfl` no-op
   lemmas and unused characterizations.
-- **Comments.** Every significant theorem tagged `**Capstone.**` / `**Key lemma.**` /
-  `**Supporting.**`; purged stale prose (the old "Mathlib-free / remaining gap / out of
+- **Comments.** Every significant theorem tagged `**Capstone**` / `**Key lemma**` /
+  `**Supporting**`; purged stale prose (the old "Mathlib-free / remaining gap / out of
   scope" notes).
 - **Docs.** This file and a full `README.md`, including an honest "what is NOT covered"
   section.
+
+## Stage 5 — Audit response
+
+An external audit (2026-06-10) verified the headline claims but found the security
+theorems stopped at the *accumulator* (the "s cancels" step was prose), the Native
+bridges were definitional tautologies, and the Poly1305/AEAD towers never met.
+Addressed in full:
+
+- **Tag-level forgery theorem** (`poly1305_tag_forgery`, `_prob`): about the real
+  `poly1305` and real 16-byte tags; subtracting two tag equations (via
+  `poly1305_value`) cancels the one-time pad `s` inside Lean. Bounds stated literally
+  as `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉` via the new `toBlockNats_length`.
+- **The towers meet** (`aead_forgery_bound`, `aead_forgery_prob` in `Aead/Security`):
+  `macData_inj` + the tag-level theorem give the AEAD forgery probability under the
+  uniform-poly-key model hypothesis (= the ChaCha20-PRF idealization);
+  `decrypt_accepts` ties acceptance to the counted tag equation.
+- **Probability model closed** (`clamp_fiber_card`): every clamped value has exactly
+  `2²²` preimages, so uniform 16-byte `r` through `clamp` is uniform on the clamped
+  keys. The counting machinery was generalized (`bitConstrained_card`) to serve both
+  this and `clampImage_card`.
+- **Native layer deleted** (see Stage 1's note) — the wrappers were the spec itself,
+  so the `*_eq_spec` theorems stated nothing.
+- **Pruned** a dozen contentless declarations (rfl-grade restatements, generic facts
+  in crypto costume, one-line contrapositives); `clamp_rfc` strengthened to a complete
+  characterization (cleared bits false **and** all other bits preserved).
+- **Hygiene**: `Tests/AxiomGuard.lean` (`#guard_msgs` on `#print axioms` — the build
+  fails if a capstone's axiom set grows), GitHub Actions CI, `.gitignore`.
 
 ## Current structure
 
 ```
 LeanChachaPoly/
   Subtypes.lean
-  ChaCha20/   Spec · Correctness · Native            + Spec/{QuarterRound,Keystream,Seek,Permutation,Xor}
-  Poly1305/   Spec · Security · Injectivity · Native + Spec/{Sum,Blocking,Accumulate,Tag,Clamp}
-  Aead/       Spec · Correctness · Security · Native  + Spec/{KeyDerivation,MacData}
-Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · PropertiesTest · Helpers
+  ChaCha20/   Spec · Correctness             + Spec/{QuarterRound,Keystream,Seek,Permutation,Xor}
+  Poly1305/   Spec · Security · Injectivity  + Spec/{Sum,Blocking,Accumulate,Tag,Clamp}
+  Aead/       Spec · Correctness · Security  + Spec/{KeyDerivation,MacData}
+Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · PropertiesTest · AxiomGuard · Helpers
 ```
 
 ## Verification
 
 - `lake build` — 0 `sorry`.
-- `#print axioms` on every capstone — `{propext, Classical.choice, Quot.sound}`, plus the
-  pre-existing `quarterRound …bv_decide.ax` pair (the lone non-foundational axiom).
+- `Tests/AxiomGuard.lean` — `#guard_msgs`-enforced `#print axioms` on every capstone:
+  `{propext, Classical.choice, Quot.sound}`, plus the pre-existing
+  `quarterRound …bv_decide.ax` pair (the lone non-foundational axiom). The build fails
+  if any set grows.
 - `lake exe test` — all RFC 8439 vector groups + property checks pass.
+- CI (`.github/workflows/ci.yml`) runs all of the above on every push.
 
 ## Future work
 

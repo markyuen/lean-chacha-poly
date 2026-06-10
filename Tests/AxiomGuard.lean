@@ -13,7 +13,8 @@ untrusted; the checker run is natively compiled rather than kernel-reduced, so
 the compiler is trusted for exactly those two Boolean evaluations).
 
 If a legitimate change alters an axiom set (e.g. removing the `bv_decide`
-dependency), update the corresponding doc-comment here — consciously.
+dependency), update the corresponding doc-comment here so the change appears
+in review.
 -/
 
 /-! ## ChaCha20 -/

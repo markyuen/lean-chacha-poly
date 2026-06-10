@@ -3,13 +3,14 @@
 A machine-checked **Lean 4** verification of RFC 8439 **ChaCha20-Poly1305 AEAD** —
 the AEAD cipher suite preferred by TLS 1.3, WireGuard, and SSH.
 
-It verifies two things most formalizations stop short of combining:
+It verifies two complementary layers:
 
-1. **Functional correctness** — the spec computes the right bytes (matches the RFC
+1. **Functional correctness** — the spec computes the right bytes (it matches the RFC
    test vectors) and `decrypt ∘ encrypt = id`.
-2. **Information-theoretic security** — Poly1305 is an almost-universal hash, giving a
-   concrete, *unconditional* forgery bound; this is a real cryptographic theorem, not
-   just a "the code does what the pseudocode says" check.
+2. **Information-theoretic security** — Poly1305 is an almost-universal hash, so a
+   forger's success probability is bounded by `8⌈L/16⌉ / 2¹⁰⁶`. The bound is
+   quantified over every possible attacker and rests on no computational assumption
+   about the hash itself.
 
 Everything is `sorry`-free and rests on Lean/Mathlib's three foundational axioms
 (`propext`, `Classical.choice`, `Quot.sound`) — with a single, explicitly documented
@@ -29,14 +30,14 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 
 | Theorem | File | Statement |
 |---|---|---|
-| `poly1305_tag_forgery_prob` | `Poly1305/Security` | **The headline.** The published Poly1305 forgery probability, about the real `poly1305` function and real 16-byte tags: with `r` uniform over the `2¹⁰⁶` clamped keys, turning an observed tag on `M` into a tag on `M' ≠ M` succeeds with probability at most **`8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`** — `⌈L/16⌉` literally as `(L+15)/16`. The one-time pad `s` is *proved* to cancel between the two tag equations, not argued in prose. |
+| `poly1305_tag_forgery_prob` | `Poly1305/Security` | **The headline.** The published Poly1305 forgery probability, stated directly about `poly1305` and its 16-byte tags: with `r` uniform over the `2¹⁰⁶` clamped keys, turning an observed tag on `M` into a tag on `M' ≠ M` succeeds with probability at most **`8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`**, with `⌈L/16⌉` written as `(L+15)/16`. The proof derives the cancellation of the one-time pad `s` from the two tag equations. |
 | `poly1305_tag_forgery` | `Poly1305/Security` | The counting form: at most `8⌈L/16⌉` clamped keys admit any pad `s` producing the observed/forged tag pair. |
-| `poly1305_byte_forgery` | `Poly1305/Security` | The byte-level engine: a forger targeting a fixed accumulator offset mod `2¹²⁸` succeeds for at most `8 · max #blocks` keys — the famous `8` from the ≤ 8 integer candidates per offset. |
-| `clampImage_card` / `clamp_fiber_card` | `Poly1305/Spec/Clamp` | The clamped key space has exactly `2¹⁰⁶` elements (the ε denominator), and every clamped value has exactly `2²²` preimages — so uniform 16-byte `r` through `clamp` *is* uniform on the clamped keys (the probability model is the real key-generation procedure). |
+| `poly1305_byte_forgery` | `Poly1305/Security` | The byte-level engine: a forger targeting a fixed accumulator offset mod `2¹²⁸` succeeds for at most `8 · max #blocks` keys; the factor `8` counts the integer candidates per offset. |
+| `clampImage_card` / `clamp_fiber_card` | `Poly1305/Spec/Clamp` | The clamped key space has exactly `2¹⁰⁶` elements (the ε denominator), and every clamped value has exactly `2²²` preimages — so the uniform distribution on clamped keys is the one that drawing 16 uniform bytes and clamping produces. |
 | `poly1305_almost_universal` | `Poly1305/Security` | Almost-universal hashing over the field `ZMod P`: two distinct block-lists collide for at most `max #blocks` keys `r` (root-counting on a nonzero difference polynomial). |
 | `toBlocks_inj` (→ `poly1305_almost_universal_msg'`) | `Poly1305/Injectivity` (→ `Security`) | The `2^(8·len)` padding makes the message→block encoding injective, lifting the bound from block-lists to **distinct messages**. |
 | `accumulate_eq_poly` | `Poly1305/Spec/Accumulate` | The iterative MAC loop **is** polynomial evaluation in `GF(2¹³⁰−5)` — the bridge the whole security argument rests on. |
-| `poly1305_value` | `Poly1305/Spec/Tag` | The 16-byte tag reads back as exactly `(accumulate + s) mod 2¹²⁸` (serialization is faithful, not lossy) — what lets the forgery bound speak about actual tag bytes. |
+| `poly1305_value` | `Poly1305/Spec/Tag` | The 16-byte tag reads back as exactly `(accumulate + s) mod 2¹²⁸` (serialization is faithful, not lossy) — the link between the forgery bound and the tag bytes themselves. |
 
 ### ChaCha20 — correctness & structure
 
@@ -111,8 +112,8 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   field, i.e. `P` prime. That 40-digit primality is *assumed* as a hypothesis
   `[Fact (Nat.Prime P)]`, not discharged (it needs a Pratt certificate). The security
   theorems are therefore conditional statements; no `Fact` instance is provided anywhere
-  in the repo, so they cannot even be *instantiated* until the certificate lands — an
-  honest reflection of the one remaining mathematical debt.
+  in the repo, so they cannot be instantiated until the certificate lands. This is the
+  one remaining mathematical gap.
 
 - **One trusted axiom.** `quarterRound_bijective` (and its two round-trips) are proved
   by `bv_decide`. The SAT solver itself is *untrusted* — it must produce an LRAT
@@ -140,7 +141,7 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   it against the RFC vectors), but it computes with `List UInt8` and bignum `Nat` — slow
   by construction. No independently written, performance-oriented implementation
   (`UInt64`-limb Poly1305, array-based ChaCha20) has been written and proved equal to the
-  spec; that is where a real implementation-equivalence theorem would live. And as for
+  spec; that is what an implementation-equivalence theorem would have to relate. And as for
   any verified-then-compiled program, the Lean compiler and runtime executing the spec
   are trusted.
 

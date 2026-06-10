@@ -24,8 +24,8 @@ Defined the three primitives over `List UInt8` and proved the functional capston
 - **Native bridges** (since removed): a `ByteArray` wrapper per primitive with
   `*_eq_spec` theorems. An external audit later found these definitional — the wrapper
   *was* the spec, so the bridge theorems were tautologies — and the layer was deleted
-  (see Stage 5). A real implementation-equivalence theorem awaits an independently
-  written fast implementation.
+  (see Stage 5). A meaningful implementation-equivalence theorem awaits an
+  independently written fast implementation.
 
 Validated against the RFC 8439 test vectors (`Tests/`).
 
@@ -41,7 +41,7 @@ Built the Poly1305 unforgeability argument as a tower:
    polynomial and a degree-`n` polynomial has ≤ `n` roots (`Polynomial.card_roots'`).
    Field-ness needs `P` prime, taken as `[Fact (Nat.Prime P)]`.
 4. `poly1305_almost_delta_universal` + `collision_union_bound` + the ≤ 8 candidate count
-   ⇒ `poly1305_byte_forgery`: the real byte-level bound `8·⌈L/16⌉`.
+   ⇒ `poly1305_byte_forgery`: the byte-level bound `8·⌈L/16⌉`.
 5. `clampImage_card` (`Spec/Clamp.lean`): the clamp mask leaves `128 − 22 = 106` bits
    free, so the clamped key space has exactly `2¹⁰⁶` elements (a bit-counting bijection
    between submasks and Boolean assignments to the free bits). Dividing the byte-level
@@ -74,7 +74,7 @@ length in the type. The analytic security tower was preserved behind a `blockNat
 - **Comments.** Every significant theorem tagged `**Capstone**` / `**Key lemma**` /
   `**Supporting**`; purged stale prose (the old "Mathlib-free / remaining gap / out of
   scope" notes).
-- **Docs.** This file and a full `README.md`, including an honest "what is NOT covered"
+- **Docs.** This file and a full `README.md`, including a "what is NOT covered"
   section.
 
 ## Stage 5 — Audit response
@@ -84,9 +84,9 @@ theorems stopped at the *accumulator* (the "s cancels" step was prose), the Nati
 bridges were definitional tautologies, and the Poly1305/AEAD towers never met.
 Addressed in full:
 
-- **Tag-level forgery theorem** (`poly1305_tag_forgery`, `_prob`): about the real
-  `poly1305` and real 16-byte tags; subtracting two tag equations (via
-  `poly1305_value`) cancels the one-time pad `s` inside Lean. Bounds stated literally
+- **Tag-level forgery theorem** (`poly1305_tag_forgery`, `_prob`): stated about
+  `poly1305` and its 16-byte tags; the proof derives the cancellation of the one-time
+  pad `s` by subtracting the two tag equations (via `poly1305_value`). Bounds stated
   as `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉` via the new `toBlockNats_length`.
 - **The towers meet** (`aead_forgery_bound`, `aead_forgery_prob` in `Aead/Security`):
   `macData_inj` + the tag-level theorem give the AEAD forgery probability under the
@@ -98,9 +98,10 @@ Addressed in full:
   this and `clampImage_card`.
 - **Native layer deleted** (see Stage 1's note) — the wrappers were the spec itself,
   so the `*_eq_spec` theorems stated nothing.
-- **Pruned** a dozen contentless declarations (rfl-grade restatements, generic facts
-  in crypto costume, one-line contrapositives); `clamp_rfc` strengthened to a complete
-  characterization (cleared bits false **and** all other bits preserved).
+- **Pruned** a dozen declarations that restated definitions, instantiated generic
+  Mathlib facts, or were one-line contrapositives of retained lemmas; `clamp_rfc`
+  strengthened to a complete characterization (cleared bits false **and** all other
+  bits preserved).
 - **Hygiene**: `Tests/AxiomGuard.lean` (`#guard_msgs` on `#print axioms` — the build
   fails if a capstone's axiom set grows), GitHub Actions CI, `.gitignore`.
 

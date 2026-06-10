@@ -149,6 +149,33 @@ into the executables), proved equal to the spec on every input:
 - All five bridge capstones are in the axiom guard with only the three foundational
   axioms (`poly1305_eq_spec` even avoids `Classical.choice`).
 
+## Phase B: Poly1305 limb arithmetic (2026-06)
+
+`accumulate` replaced by a poly1305-donna-style 5×26-bit limb engine in unboxed
+`UInt64` (`Fast/Poly1305.lean`); the Phase A GMP-`Nat` engine survives as
+`accumulateNat` (differential test + bench baseline). Capstone `poly1305_eq_spec`
+kept its name, statement, and pinned axiom set `[propext, Quot.sound]`, so the
+AEAD bridge, AxiomGuard, and vector tests needed zero changes.
+
+- Engine: all-arithmetic (`+ * / %` with power-of-two literals — clang emits
+  shifts/ands, and the form stays in `omega`'s fragment); 5 limb registers
+  threaded through a tail-recursive `go`; invariant `hᵢ < 2²⁷`; the `2¹³⁰ ≡ 5`
+  wrap folds into `sᵢ = 5·rᵢ` products (all intermediates < 2⁶¹); freeze =
+  one `limbsToNat h % P` per message; trailing partial block = one `Spec.step`.
+- Bridge (`Fast/Bridge/Poly1305Limb.lean` + rewritten accumulation section of
+  `Fast/Bridge/Poly1305.lean`): per-block `stepLimbs` with equation-style
+  intermediates discharged by `rfl` against the loop body's definitional
+  let-fvars under `fun_induction`; the two non-linear facts isolated as
+  `mul_wrap` (`ring`) and `carry_fixup` (`omega`); loop invariant is the frozen
+  value, so no freeze lemma exists.
+- Proof gotchas recorded: a single end-to-end `omega` over the assembled value
+  identity diverges (>10 min) — stage the finish via `Nat.add_mul_mod_self_right`
+  instead; `congr` on goals containing limb let-fvars exceeds `maxRecDepth` —
+  rewrite the foldl seed with a targeted `have` instead; `UInt64.size` is an
+  opaque atom to omega — `rw [show UInt64.size = 2^64 from rfl]` first.
+- Bench (Apple Silicon): Poly1305 1.09–1.19 GB/s at 64 KiB–1 MiB (~70× Phase A,
+  ~14 ns/block); AEAD 168–171 MB/s (from 15), now ChaCha20-bound.
+
 ## Future work
 
 - **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from
@@ -156,6 +183,5 @@ into the executables), proved equal to the spec on every input:
   whole library uniformly foundational.
 - **Unconditional security.** Discharge `Nat.Prime (2¹³⁰ − 5)` via a Pratt certificate,
   removing the `[Fact (Nat.Prime P)]` hypothesis.
-- **Poly1305 Phase B.** poly1305-donna-style 5×26-bit `UInt64` limb arithmetic with
-  delayed carries; bridge by swapping only the per-block step lemma (the load and
-  block-loop bridges are reusable). The remaining order of magnitude of throughput.
+- **Faster ChaCha20.** Now the AEAD bottleneck (~205 MB/s vs limb Poly1305's
+  ~1.1 GB/s): fused keystream-XOR pass, `USize` indexing.

@@ -3,20 +3,21 @@ import LeanChachaPoly.Fast.Types
 /-!
 # Poly1305 — fast implementation
 
-The spec's field arithmetic is already GMP-backed `Nat` (a 130-bit mod-mul
-per block); its cost is the `List` traversal around it — `take`/`drop`
-allocation per block and a per-byte `foldl` over `List.finRange`. This
-implementation eliminates that:
+Two engines over `ByteArray` messages with offset-indexed block loads:
 
-- the message stays a `ByteArray`; blocks are read by offset,
-- each 16-byte block is loaded as two `UInt64` little-endian words combined
-  into a `Nat` (two GMP limbs, no per-byte `Nat` operations),
-- the accumulation loop is a tail recursion over the byte offset, reusing
-  `Spec.step` (so the arithmetic is *definitionally* the spec's).
+- `accumulate` — the production path: poly1305-donna-style 5×26-bit limb
+  arithmetic in unboxed `UInt64` (zero heap allocation per block; the only
+  GMP work is once per message: the `r` limb split, the freeze, and the
+  optional trailing partial block).
+- `accumulateNat` — the Phase A baseline: one GMP `Spec.step` (130-bit
+  mul + mod) per block. Retained with its own equivalence theorem
+  (`accumulateNat_eq`, and `accumulate_eq_accumulateNat` tying the two
+  engines together) plus differential tests and a benchmark row.
 
-Loads are written with `+`/`*` rather than `|||`/`<<<` so the bridge proofs
-reduce to linear arithmetic (`omega`); the compiler emits the same scalar
-code either way.
+Everything is written with `+ * / %` and power-of-two literals rather than
+bitwise ops: clang compiles unsigned div/mod by constant powers of two to
+shifts/ands, and the all-arithmetic form keeps the bridge proofs inside
+`omega`'s fragment.
 
 Equivalence with `Poly1305.Spec.poly1305` is proved in
 `LeanChachaPoly.Fast.Bridge.Poly1305` (`poly1305_eq_spec`).
@@ -69,10 +70,11 @@ def extractS (key : Key) : Nat :=
 
 /-! ## Accumulation -/
 
-/-- Accumulate the whole message: full 16-byte blocks get the `2¹²⁸` high
-    bit, a trailing partial block gets `2^(len·8)`. Shaped to match the
-    spec's `toBlockNats` take-16/drop-16 recursion. -/
-def accumulate (r : Nat) (m : ByteArray) : Nat :=
+/-- The Nat-engine accumulation (Phase A): full 16-byte blocks get the `2¹²⁸`
+    high bit, a trailing partial block gets `2^(len·8)`; every block takes one
+    GMP `Spec.step`. Superseded by the limb-engine `accumulate` below; kept as
+    the differential-test and benchmark baseline. -/
+def accumulateNat (r : Nat) (m : ByteArray) : Nat :=
   go 0 0
 where
   go (off acc : Nat) : Nat :=
@@ -81,6 +83,70 @@ where
     else if off < m.size then
       step r acc (loadFinal m off)
     else acc
+  termination_by m.size - off
+
+/-! ## Limb accumulation (poly1305-donna style, 5×26-bit limbs)
+
+The per-block work is pure unboxed `UInt64` arithmetic — no `Nat` allocation
+until the final freeze. Written with `+ * / %` and power-of-two literals only
+(no bitwise ops): clang compiles unsigned div/mod by constant powers of two to
+shifts/ands, and the all-arithmetic form keeps the bridge proofs in `omega`'s
+fragment. The accumulator rides in five 26-bit limbs `h0..h4` (radix 2²⁶) with
+the invariant `hᵢ < 2²⁷`; `r` is preloaded as limbs `r0..r4 < 2²⁶` plus
+`s1..s4 = 5·r1..5·r4` so the `2¹³⁰ ≡ 5 (mod P)` wrap folds into the schoolbook
+products, which then fit `UInt64` (each `dᵢ < 2⁶⁰`). One carry pass plus the
+mandatory extra `g0 → h1` carry restores the invariant. -/
+
+/-- Value of a 5×26-bit limb accumulator. -/
+def limbsToNat (h0 h1 h2 h3 h4 : UInt64) : Nat :=
+  h0.toNat + h1.toNat * 2^26 + h2.toNat * 2^52 + h3.toNat * 2^78 + h4.toNat * 2^104
+
+/-- Accumulate all blocks with limb arithmetic. Full 16-byte blocks run on the
+    `UInt64` limb engine; the optional trailing partial block takes one
+    `Spec.step` on the frozen value (one GMP multiply per message). The `r % P`
+    reduction makes the result agree with the spec's `accumulate` for *every*
+    `r`, and is an identity for real (clamped, < 2¹²⁸) keys. -/
+def accumulate (r : Nat) (m : ByteArray) : Nat :=
+  let rr := r % P
+  go (UInt64.ofNat (rr % 67108864))
+     (UInt64.ofNat (rr / 67108864 % 67108864))
+     (UInt64.ofNat (rr / 4503599627370496 % 67108864))
+     (UInt64.ofNat (rr / 302231454903657293676544 % 67108864))
+     (UInt64.ofNat (rr / 20282409603651670423947251286016))
+     (UInt64.ofNat (5 * (rr / 67108864 % 67108864)))
+     (UInt64.ofNat (5 * (rr / 4503599627370496 % 67108864)))
+     (UInt64.ofNat (5 * (rr / 302231454903657293676544 % 67108864)))
+     (UInt64.ofNat (5 * (rr / 20282409603651670423947251286016)))
+     0 0 0 0 0 0
+where
+  go (r0 r1 r2 r3 r4 s1 s2 s3 s4 : UInt64) (off : Nat) (h0 h1 h2 h3 h4 : UInt64) : Nat :=
+    if h : off + 16 ≤ m.size then
+      let lo := load8 m off (by omega)
+      let hi := load8 m (off + 8) (by omega)
+      -- block limbs folded into the accumulator (2^24 = the full-block high bit)
+      let u0 := h0 + lo % 67108864
+      let u1 := h1 + lo / 67108864 % 67108864
+      let u2 := h2 + (lo / 4503599627370496 + hi % 16384 * 4096)
+      let u3 := h3 + hi / 16384 % 67108864
+      let u4 := h4 + (hi / 1099511627776 + 16777216)
+      -- schoolbook multiply with the 2^130 ≡ 5 wrap folded in via s_i = 5·r_i
+      let d0 := u0 * r0 + u1 * s4 + u2 * s3 + u3 * s2 + u4 * s1
+      let d1 := u0 * r1 + u1 * r0 + u2 * s4 + u3 * s3 + u4 * s2
+      let d2 := u0 * r2 + u1 * r1 + u2 * r0 + u3 * s4 + u4 * s3
+      let d3 := u0 * r3 + u1 * r2 + u2 * r1 + u3 * r0 + u4 * s4
+      let d4 := u0 * r4 + u1 * r3 + u2 * r2 + u3 * r1 + u4 * r0
+      -- carry chain, top wrap (·5), and the extra g0 → h1 carry
+      let e1 := d1 + d0 / 67108864
+      let e2 := d2 + e1 / 67108864
+      let e3 := d3 + e2 / 67108864
+      let e4 := d4 + e3 / 67108864
+      let g0 := d0 % 67108864 + e4 / 67108864 * 5
+      go r0 r1 r2 r3 r4 s1 s2 s3 s4 (off + 16)
+        (g0 % 67108864) (e1 % 67108864 + g0 / 67108864)
+        (e2 % 67108864) (e3 % 67108864) (e4 % 67108864)
+    else
+      let acc := limbsToNat h0 h1 h2 h3 h4 % P
+      if off < m.size then step r acc (loadFinal m off) else acc
   termination_by m.size - off
 
 /-! ## Tag serialization -/

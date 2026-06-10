@@ -105,10 +105,13 @@ def main : IO Unit := do
         (fun i => (ChaCha20.Spec.chacha20 skey snonce (UInt32.ofNat i) ml).headD 0))
 
   -- Poly1305
+  let rN := Poly1305.Fast.extractR pkey
   for (bytes, fIters, sIters) in sizes do
     let m := randBA (UInt64.ofNat (200 + bytes)) bytes
     sink := sink + (← row "poly1305 fast" bytes fIters
       (fun _ => (Poly1305.Fast.poly1305 pkey m).get! 0))
+    sink := sink + (← row "poly1305 fast nat" bytes fIters
+      (fun _ => UInt8.ofNat (Poly1305.Fast.accumulateNat rN m % 256)))
     if sIters > 0 then
       let ml := m.data.toList
       sink := sink + (← row "poly1305 spec" bytes sIters

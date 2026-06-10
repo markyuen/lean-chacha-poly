@@ -123,6 +123,24 @@ def runTests : IO Unit := do
 
   group "AEAD (fast)" aeadChecks
 
+  group "limb vs nat engine" do
+    -- The limb engine must agree with the Nat engine for every r (it reduces
+    -- r % P internally; equal by Nat.mul_mod), including r ≥ P and r = 0.
+    let keys : List (String × Nat) := [
+      ("clamped key", Poly1305.Fast.extractR (fastPolyKey
+        (Poly1305.Spec.Key.ofBytes? (randList 11 32)).get!)),
+      ("r = 0", 0),
+      ("r = P - 1", Poly1305.Spec.P - 1),
+      ("r ≥ P", 2^130 + 12345)
+    ]
+    let mut results := #[]
+    for (name, r) in keys do
+      let ok := diffLengths.all fun len =>
+        let m := (randList (UInt64.ofNat (3000 + len)) len).toByteArray
+        Poly1305.Fast.accumulate r m == Poly1305.Fast.accumulateNat r m
+      results := results.push (← checkBool name ok)
+    return results.toList
+
   group "differential fast vs spec" do
     let specKey := (ChaCha20.Spec.Key.ofBytes? (randList 1 32)).get!
     let specNonce := (ChaCha20.Spec.Nonce.ofBytes? (randList 2 12)).get!

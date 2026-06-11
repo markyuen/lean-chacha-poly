@@ -14,9 +14,9 @@ It verifies three complementary layers:
    `poly1305_adversary_forgery_prob` bounds the fraction of consistent clamped keys
    it forges; `poly1305_adversary_forgery_multi_prob` adds the `v`-attempt union
    bound `v · 8⌈L/16⌉ / 2¹⁰⁶`. The bound involves no computational hardness
-   assumption; its one mathematical hypothesis is the primality of `2¹³⁰ − 5`, a
-   well-known fact taken as `[Fact (Nat.Prime P)]` rather than yet proved here
-   (see *What is NOT covered*).
+   assumption; its one mathematical hypothesis, the primality of `2¹³⁰ − 5`, is
+   discharged by an axiom-free Lucas/Pratt certificate (`prime_P`), so the bounds
+   are unconditional.
 3. **A verified fast implementation** — a `ByteArray`-based implementation
    (`LeanChachaPoly/Fast/`) proved equal to the spec on *every* input
    (`chacha20_eq_spec`, `poly1305_eq_spec`, `encrypt_eq_spec`, `decrypt_eq_spec`),
@@ -51,6 +51,7 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 | `toBlocks_inj` (→ `poly1305_almost_universal_msg'`) | `Poly1305/Injectivity` (→ `Security`) | The `2^(8·len)` padding makes the message→block encoding injective, lifting the bound from block-lists to **distinct messages**. |
 | `accumulate_eq_poly` | `Poly1305/Spec/Accumulate` | The iterative MAC loop **is** polynomial evaluation in `GF(2¹³⁰−5)` — the bridge the whole security argument rests on. |
 | `poly1305_value` | `Poly1305/Spec/Tag` | The 16-byte tag reads back as exactly `(accumulate + s) mod 2¹²⁸` (serialization is faithful, not lossy) — the link between the forgery bound and the tag bytes themselves. |
+| `prime_P` | `Poly1305/Spec/Primality` | `2¹³⁰ − 5` is prime, by an axiom-free Lucas/Pratt certificate (kernel `decide` over a fuel-based `powMod` — no `native_decide`). Supplies `Fact (Nat.Prime P)`, so the `ZMod P`-field security bounds are unconditionally instantiable. |
 
 ### ChaCha20 — correctness & structure
 
@@ -122,9 +123,10 @@ RFC 8439 vectors, runs the same vectors through the fast implementation, and
 differentially checks fast against spec on block-boundary lengths. It also runs the
 316 Wycheproof ChaCha20-Poly1305 cases with a 96-bit nonce (`Tests/WycheproofTest.lean`,
 256 `valid` + 60 `invalid`: modified tags, edge-case ciphertexts and Poly1305 keys,
-truncations) — adversarial coverage of the one leap the proofs cannot reach, that the
-spec matches RFC 8439. `Tests/AxiomGuard.lean` re-checks every capstone's axiom set at
-compile time (the build fails if one silently grows).
+truncations) through both the spec and the fast implementation — adversarial coverage
+of the one leap the proofs cannot reach, that the spec matches RFC 8439.
+`Tests/AxiomGuard.lean` re-checks every capstone's axiom set at compile time (the build
+fails if one silently grows).
 
 ## How length/size invariants are encoded
 
@@ -181,12 +183,15 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   quantifies over a uniform one-time poly key, which is exactly what the PRF assumption
   would supply for `derivePolyKey`.
 
-- **Primality of `P = 2¹³⁰ − 5`.** The field-level forgery bounds need `ZMod P` to be a
-  field, i.e. `P` prime. That 40-digit primality is *assumed* as a hypothesis
-  `[Fact (Nat.Prime P)]`, not discharged (it needs a Pratt certificate). The security
-  theorems are therefore conditional statements; no `Fact` instance is provided anywhere
-  in the repo, so they cannot be instantiated until the certificate lands. This is the
-  one remaining mathematical gap.
+- **Primality of `P = 2¹³⁰ − 5`** *(discharged).* The field-level forgery bounds need
+  `ZMod P` to be a field, i.e. `P` prime. This 40-digit primality is proved by an
+  axiom-free Lucas/Pratt certificate (`prime_P`, `Poly1305/Spec/Primality.lean`), which
+  also provides `instance : Fact (Nat.Prime P)` — so the security theorems retain the
+  `[Fact (Nat.Prime P)]` hypothesis for modularity but are now unconditionally
+  instantiable. The certificate's modular exponentiations are evaluated by the *kernel*
+  through a fuel-based `powMod` and plain `decide`, so it adds no axiom (`#print axioms
+  prime_P` is `[propext, Classical.choice, Quot.sound]`) — see
+  [docs/primality-certificate.md](docs/primality-certificate.md).
 
 - **One trusted axiom.** `quarterRound_bijective` (and its two round-trips) are proved
   by `bv_decide`. The SAT solver itself is *untrusted* — it must produce an LRAT
@@ -199,13 +204,14 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   already present) would remove even that — see future work.
 
 - **Constant-time / side-channel resistance.** The proofs are about input→output values;
-  they say nothing about timing, caches, or power. The canonical `decrypt` compares tags
-  with a short-circuiting `recvTag == expTag.val` — the classic MAC timing leak if
-  executed as written. `decryptCT` removes that branch at the source level (a whole-tag
-  `ctEq`: equal lengths and a zero OR-accumulation of per-byte XORs), and
-  `decryptCT_eq_decrypt` proves it computes the same function. This removes the named
-  source-level short-circuit but is not a runtime guarantee: constant-time execution of
-  the compiled comparison is a compiler/hardware property outside Lean's evaluation model.
+  they say nothing about timing, caches, or power. The fast implementation — the code
+  that actually runs — compares tags with a whole-tag `ctEq` (equal sizes and a zero
+  OR-accumulation of per-byte XORs), scanning every byte with no first-mismatch branch;
+  `Fast.Bridge.Aead.decrypt_eq_spec` proves it computes the same function as the spec.
+  (The spec's reference `decrypt` keeps a short-circuiting `==` for readability, with
+  `decryptCT`/`decryptCT_eq_decrypt` the spec-level constant-time variant.) This removes
+  the source-level short-circuit but is not a hardware guarantee: constant-time execution
+  of the compiled comparison is a compiler/CPU property outside Lean's evaluation model.
 
 - **Nonce-reuse safety and message-length limits.** Reusing a `(key, nonce)` pair is
   catastrophic for Poly1305, and the 32-bit block counter wraps on messages over
@@ -223,8 +229,6 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 - Reprove `quarterRoundInv_quarterRound` / `quarterRound_quarterRoundInv` algebraically
   (via `rotl32_inv` / `rotl32_xor` / `xor_self_cancel`) to make the whole library
   uniformly foundational — no `bv_decide` axiom.
-- Discharge `Nat.Prime (2¹³⁰ − 5)` (Pratt certificate) to make the security bounds
-  unconditional.
 - Speed up the fast ChaCha20 further (still the AEAD bottleneck at ~475 MB/s
   vs the limb Poly1305's ~1.1 GB/s): the remaining measured scalar win is
   `USize` indexing (~+12%, prototyped), which needs a `msg.size < USize.size`

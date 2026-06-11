@@ -125,8 +125,8 @@ theorem ctEq_iff (a b : List UInt8) : ctEq a b = true ↔ a = b := by
 /-- `ctEq a a` is `true`. -/
 @[simp] theorem ctEq_self (a : List UInt8) : ctEq a a = true := (ctEq_iff a a).mpr rfl
 
-/-- `ctEq` agrees with `==`; the fast bridge rewrites the `ByteArray` comparison
-    along this once both sides are reduced to lists. -/
+/-- `ctEq` agrees with `==` (both decide list equality). `decryptCT_eq_decrypt`
+    and the fast bridge (`Fast.Bridge.Aead.ctEq_toList_beq`) rewrite along this. -/
 theorem beq_eq_ctEq (a b : List UInt8) : (a == b) = ctEq a b := by
   by_cases h : a = b
   · subst h; simp

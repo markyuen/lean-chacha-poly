@@ -53,6 +53,15 @@ def pushLe64 (acc : ByteArray) (n : Nat) : ByteArray :=
 def macData (aad ciphertext : ByteArray) : ByteArray :=
   pushLe64 (pushLe64 (padTo16 aad ++ padTo16 ciphertext) aad.size) ciphertext.size
 
+/-- Constant-time-shaped tag comparison: equal sizes and a zero OR-accumulation of
+    the per-byte XOR differences, scanning every byte rather than short-circuiting
+    on the first mismatch. `Fast.Bridge.Aead.ctEq_toList` proves it decides
+    equality (so `decrypt` keeps the same input→output behavior); this removes the
+    first-mismatch branch from the running code. A hardware constant-time guarantee
+    additionally requires the compiled comparison to be branch-free. -/
+def ctEq (a b : ByteArray) : Bool :=
+  (a.size == b.size) && ((Array.zipWith (· ^^^ ·) a.data b.data).foldl (· ||| ·) 0 == 0)
+
 /-! ## Encrypt and decrypt -/
 
 /-- AEAD encryption: returns ciphertext ‖ 16-byte tag. -/
@@ -64,8 +73,9 @@ def encrypt (key : Key) (nonce : Nonce)
   ciphertext ++ tag
 
 /-- AEAD decryption: returns `some plaintext` on success, `none` if the tag
-    does not match. Same timing caveat as `Aead.Spec.decrypt`: the tag
-    comparison is not constant-time. -/
+    does not match. The tag check uses the whole-tag `ctEq` (no short-circuit on
+    the first differing byte); `Fast.Bridge.Aead.decrypt_eq_spec` proves this
+    equals `Aead.Spec.decrypt`. -/
 def decrypt (key : Key) (nonce : Nonce)
     (ciphertextAndTag aad : ByteArray) : Option ByteArray :=
   if ciphertextAndTag.size < 16 then none
@@ -75,7 +85,7 @@ def decrypt (key : Key) (nonce : Nonce)
     let recvTag    := ciphertextAndTag.extract ctLen ciphertextAndTag.size
     let polyKey    := derivePolyKey key nonce
     let expTag     := Poly1305.Fast.poly1305 polyKey (macData aad ciphertext)
-    if recvTag == expTag then
+    if ctEq recvTag expTag then
       some (ChaCha20.Fast.chacha20 key nonce 1 ciphertext)
     else none
 

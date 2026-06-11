@@ -61,6 +61,21 @@ theorem macData_toList (aad ct : ByteArray) :
     toList_append, padTo16_toList, padTo16_toList]
   simp
 
+/-! ## Constant-time tag comparison -/
+
+/-- **Supporting.** Fast `ctEq` matches `Aead.Spec.ctEq` on the underlying lists. -/
+theorem ctEq_toList (a b : ByteArray) :
+    Aead.Fast.ctEq a b = Aead.Spec.ctEq a.data.toList b.data.toList := by
+  rw [Aead.Fast.ctEq, Aead.Spec.ctEq, length_toList, length_toList,
+    ← Array.foldl_toList, Array.toList_zipWith]
+
+/-- **Key lemma.** Fast `ctEq` decides list equality, agreeing with `==` — the
+    hinge that lets the constant-time comparison in `Fast.decrypt` bridge to the
+    `==` of `Aead.Spec.decrypt`. -/
+theorem ctEq_toList_beq (a b : ByteArray) :
+    Aead.Fast.ctEq a b = (a.data.toList == b.data.toList) := by
+  rw [ctEq_toList, ← Aead.Spec.beq_eq_ctEq]
+
 /-! ## Capstones -/
 
 /-- **Capstone.** Fast AEAD encryption equals the spec on every input. -/
@@ -87,7 +102,7 @@ theorem decrypt_eq_spec (key : Key) (nonce : Nonce) (ctt aad : ByteArray) :
     have htag : (ctt.extract (ctt.size - 16) ctt.size).data.toList
         = ctt.data.toList.drop (ctt.size - 16) := by
       rw [toList_extract, List.take_of_length_le (by simp)]
-    rw [beq_eq_toList_beq, Poly1305.Fast.poly1305_eq_spec, derivePolyKey_eq,
+    rw [ctEq_toList_beq, Poly1305.Fast.poly1305_eq_spec, derivePolyKey_eq,
       macData_toList, hct, htag]
     split
     · rw [Option.map_some, ChaCha20.Fast.chacha20_eq_spec, hct]

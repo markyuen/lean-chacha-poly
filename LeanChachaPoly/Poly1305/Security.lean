@@ -688,6 +688,166 @@ theorem poly1305_tag_forgery_prob (M M' : List UInt8)
   gcongr
   exact_mod_cast poly1305_tag_forgery M M' hne t t'
 
+/-! ## The conditional forgery probability — `Pr[forge | observed tag t]`
+
+    `poly1305_tag_forgery_prob` is the key-counting form. Bernstein's statement is
+    conditional: an attacker *observes* the genuine tag `t` on `M`, then forges.
+    Conditioning on the observed tag does not skew the multiplier `r`: for each `r`,
+    exactly one pad `s` produces tag `t` on `M`, so the observed-tag event has the
+    same `2¹⁰⁶` keys as the unconditional space, and `Pr[forge | observed t]` is the
+    same `(#bad r)/2¹⁰⁶ = ε`.
+
+    The key is modelled as `(r, s)`: `r` the clamped multiplier (`clampedKeys`, the
+    `2¹⁰⁶` field values) and `s ∈ [0, 2¹²⁸)` the pad. By `poly1305_value` and
+    `accumulate_eq_eval_val`, the tag value on `M` is `(tagNat r M + s) mod 2¹²⁸`. -/
+
+/-- **Supporting.** The little-endian deserialization of any 16-byte value is `< 2¹²⁸`. -/
+theorem leToNat16_lt (bs : Bytes 16) : leToNat16 bs < 2 ^ 128 := by
+  unfold leToNat16
+  rw [foldl_add_eq_sum, Nat.zero_add]
+  have hbound : ((List.finRange 16).map
+        (fun i => (bs.val.get (i.cast bs.property.symm)).toNat * 2 ^ (i.val * 8))).sum
+      ≤ ((List.finRange 16).map (fun i : Fin 16 => 255 * 2 ^ (i.val * 8))).sum := by
+    apply List.sum_le_sum
+    intro i _
+    have hb : (bs.val.get (i.cast bs.property.symm)).toNat ≤ 255 := by
+      have := (bs.val.get (i.cast bs.property.symm)).toNat_lt; omega
+    exact Nat.mul_le_mul_right _ hb
+  have hconst : ((List.finRange 16).map (fun i : Fin 16 => 255 * 2 ^ (i.val * 8))).sum
+      < 2 ^ 128 := by decide
+  omega
+
+/-- The tag *value* of multiplier `r` on `M` before adding the pad — the canonical
+    field representative `accumulate r (blocks M)` (`accumulate_eq_eval_val`). -/
+noncomputable def tagNat (r : ZMod P) (M : List UInt8) : Nat :=
+  ((msgPoly (blockNats (toBlocks M))).eval r).val
+
+/-- The "observed tag `t` on `M`" event on a key `(r, s)`: the Poly1305 tag value is
+    `t`. By `poly1305_value`, `(tagNat (extractR key) M + extractS key) % 2¹²⁸ =
+    leToNat16 (poly1305 key M)`, so this is exactly `poly1305 key M = t`. -/
+def observed (M : List UInt8) (t : Bytes 16) (rs : ZMod P × Nat) : Prop :=
+  (tagNat rs.1 M + rs.2) % 2 ^ 128 = leToNat16 t
+
+/-- The key space: clamped multiplier `r` (`clampedKeys`, `2¹⁰⁶` values) × pad
+    `s ∈ [0, 2¹²⁸)`. -/
+noncomputable def keySpace : Finset (ZMod P × Nat) :=
+  clampedKeys ×ˢ Finset.range (2 ^ 128)
+
+open scoped Classical in
+set_option maxRecDepth 4000 in
+set_option linter.constructorNameAsVariable false in
+/-- **Key lemma (one-time-pad uniformity).** Conditioning on the observed tag does not
+    skew the multiplier: for each clamped `r` exactly one pad `s` yields tag `t` on
+    `M`, so the observed-tag event has exactly `2¹⁰⁶` keys — the same count as the
+    unconditional space. This is the s-cancellation made explicit (the never-formalized
+    piece the pruned `tag_mask_*` lemmas gestured at). -/
+theorem observed_card (M : List UInt8) (t : Bytes 16) :
+    (keySpace.filter (observed M t)).card = 2 ^ 106 := by
+  classical
+  rw [← clampedKeys_card]
+  have hv : leToNat16 t < 2 ^ 128 := leToNat16_lt t
+  refine Finset.card_nbij' (fun rs => rs.1)
+    (fun r => (r, (leToNat16 t + 2 ^ 128 - tagNat r M % 2 ^ 128) % 2 ^ 128)) ?_ ?_ ?_ ?_
+  · -- maps the observed-tag keys into `clampedKeys`
+    intro rs hrs
+    rw [Finset.mem_coe, Finset.mem_filter, keySpace, Finset.mem_product] at hrs
+    exact hrs.1.1
+  · -- each clamped `r` has its (unique) observed pad, landing back in the filter
+    intro r hr
+    rw [Finset.mem_coe] at hr
+    rw [Finset.mem_coe, Finset.mem_filter, keySpace, Finset.mem_product, Finset.mem_range]
+    refine ⟨⟨hr, Nat.mod_lt _ (by positivity)⟩, ?_⟩
+    show (tagNat r M + (leToNat16 t + 2 ^ 128 - tagNat r M % 2 ^ 128) % 2 ^ 128) % 2 ^ 128
+      = leToNat16 t
+    set a := tagNat r M
+    set v := leToNat16 t
+    omega
+  · -- uniqueness: the observed pad of `(r, s)` is exactly `s`
+    intro rs hrs
+    rw [Finset.mem_coe, Finset.mem_filter, keySpace, Finset.mem_product, Finset.mem_range] at hrs
+    have hs : rs.2 < 2 ^ 128 := hrs.1.2
+    have hobs : (tagNat rs.1 M + rs.2) % 2 ^ 128 = leToNat16 t := hrs.2
+    have hpad : (leToNat16 t + 2 ^ 128 - tagNat rs.1 M % 2 ^ 128) % 2 ^ 128 = rs.2 := by
+      set a := tagNat rs.1 M
+      set v := leToNat16 t
+      omega
+    exact Prod.ext rfl hpad
+  · intro r _; rfl
+
+open scoped Classical in
+set_option maxRecDepth 4000 in
+set_option linter.constructorNameAsVariable false in
+/-- **Capstone (conditional form).** Bernstein's textbook statement: an attacker who
+    *observes* the genuine tag `t` on `M` and then forges a tag `t'` on `M' ≠ M`
+    succeeds with conditional probability at most `8·max ⌈|M|/16⌉ ⌈|M'|/16⌉ / 2¹⁰⁶`.
+    The one-time pad makes the observed tag independent of the multiplier `r`
+    (`observed_card`: the denominator is `2¹⁰⁶` regardless of `t`), so conditioning on
+    the observation does not help the forger. The numerator reduces — by subtracting the
+    two tag equations, where the pad `s` cancels — to the byte-level
+    `poly1305_byte_forgery` bound. -/
+theorem poly1305_tag_forgery_cond_prob (M M' : List UInt8) (hne : M ≠ M') (t t' : Bytes 16) :
+    ((keySpace.filter (fun rs => observed M t rs ∧ observed M' t' rs)).card : ℝ)
+      / (keySpace.filter (observed M t)).card
+      ≤ ((8 * max ((M.length + 15) / 16) ((M'.length + 15) / 16) : ℕ) : ℝ) / 2 ^ 106 := by
+  have hpos : ∀ b ∈ blockNats (toBlocks M), 0 < b ∧ b < P := by
+    rw [blockNats_toBlocks]; exact toBlockNats_pos M
+  have hpos' : ∀ b ∈ blockNats (toBlocks M'), 0 < b ∧ b < P := by
+    rw [blockNats_toBlocks]; exact toBlockNats_pos M'
+  have hBne : blockNats (toBlocks M) ≠ blockNats (toBlocks M') := by
+    rw [blockNats_toBlocks, blockNats_toBlocks]
+    exact fun h => hne (toBlockNats_inj M M' h)
+  -- (r, s) ↦ r sends the observed-and-forged keys into the byte-level Δ bad set
+  have hmaps : Set.MapsTo (fun rs : ZMod P × Nat => rs.1)
+      (keySpace.filter (fun rs => observed M t rs ∧ observed M' t' rs))
+      (Finset.univ.filter (fun r : ZMod P =>
+        (((msgPoly (blockNats (toBlocks M))).eval r).val : ℤ)
+          - ((msgPoly (blockNats (toBlocks M'))).eval r).val
+          ≡ ((leToNat16 t : ℤ) - leToNat16 t') [ZMOD 2 ^ 128])) := by
+    intro rs hrs
+    rw [Finset.mem_coe, Finset.mem_filter] at hrs
+    obtain ⟨_, hoM, hoM'⟩ := hrs
+    rw [Finset.mem_coe, Finset.mem_filter]
+    refine ⟨Finset.mem_univ _, ?_⟩
+    have e1 : (tagNat rs.1 M + rs.2) % 2 ^ 128 = leToNat16 t := hoM
+    have e2 : (tagNat rs.1 M' + rs.2) % 2 ^ 128 = leToNat16 t' := hoM'
+    have h1 : ((tagNat rs.1 M : ℤ) + rs.2) % 2 ^ 128 = (leToNat16 t : ℤ) := by
+      have h := congrArg (fun n : ℕ => (n : ℤ)) e1; push_cast at h; exact h
+    have h2 : ((tagNat rs.1 M' : ℤ) + rs.2) % 2 ^ 128 = (leToNat16 t' : ℤ) := by
+      have h := congrArg (fun n : ℕ => (n : ℤ)) e2; push_cast at h; exact h
+    have m1 : ((tagNat rs.1 M : ℤ) + rs.2) ≡ (leToNat16 t : ℤ) [ZMOD 2 ^ 128] :=
+      h1.trans (Int.emod_eq_of_lt (by positivity) (by exact_mod_cast leToNat16_lt t)).symm
+    have m2 : ((tagNat rs.1 M' : ℤ) + rs.2) ≡ (leToNat16 t' : ℤ) [ZMOD 2 ^ 128] :=
+      h2.trans (Int.emod_eq_of_lt (by positivity) (by exact_mod_cast leToNat16_lt t')).symm
+    have hfin := Int.ModEq.sub m1 m2
+    simp only [tagNat, add_sub_add_right_eq_sub] at hfin
+    exact hfin
+  -- and it is injective there: the pad `s` is pinned by the observed tag
+  have hinj : Set.InjOn (fun rs : ZMod P × Nat => rs.1)
+      (keySpace.filter (fun rs => observed M t rs ∧ observed M' t' rs)) := by
+    intro rs hrs rs' hrs' heq
+    rw [Finset.mem_coe, Finset.mem_filter, keySpace, Finset.mem_product, Finset.mem_range]
+      at hrs hrs'
+    have ho : (tagNat rs.1 M + rs.2) % 2 ^ 128 = leToNat16 t := hrs.2.1
+    have ho' : (tagNat rs'.1 M + rs'.2) % 2 ^ 128 = leToNat16 t := hrs'.2.1
+    have hs : rs.2 < 2 ^ 128 := hrs.1.2
+    have hs' : rs'.2 < 2 ^ 128 := hrs'.1.2
+    refine Prod.ext heq ?_
+    have heq' : rs.1 = rs'.1 := heq
+    rw [heq'] at ho
+    set a := tagNat rs'.1 M
+    set v := leToNat16 t
+    omega
+  have hnum : (keySpace.filter (fun rs => observed M t rs ∧ observed M' t' rs)).card
+      ≤ 8 * max ((M.length + 15) / 16) ((M'.length + 15) / 16) :=
+    calc (keySpace.filter (fun rs => observed M t rs ∧ observed M' t' rs)).card
+        ≤ _ := Finset.card_le_card_of_injOn _ hmaps hinj
+      _ ≤ 8 * max (blockNats (toBlocks M)).length (blockNats (toBlocks M')).length :=
+          poly1305_byte_forgery _ _ hpos hpos' hBne _
+      _ = 8 * max ((M.length + 15) / 16) ((M'.length + 15) / 16) := by
+          rw [blockNats_length, blockNats_length]
+  rw [observed_card, show ((2 ^ 106 : ℕ) : ℝ) = (2 : ℝ) ^ 106 by push_cast; ring]
+  gcongr
+
 /-! ## Adversary-as-function formulation
 
     `poly1305_tag_forgery` fixes the forged pair `(M', t')`. A deterministic

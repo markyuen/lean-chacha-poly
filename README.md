@@ -240,12 +240,18 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 ## Future work
 
 - Speed up the fast ChaCha20 further. The `USize`-indexing win (~11% on full
-  blocks, now implemented behind the `msg.size < USize.size` guard) leaves the
+  blocks, implemented behind the `msg.size < USize.size` guard) leaves the
   ChaCha20 pass at ~530 MB/s, still the AEAD bottleneck vs the limb Poly1305's
-  ~1.1 GB/s. The next scalar candidate (threading the `USize` block base
-  through `chacha20SetGoU` instead of reconverting `off.toUSize` per block, and
-  a small-message path for the single-block case) is unmeasured; SIMD is
-  outside Lean's current reach.
+  ~1.1 GB/s. The two scalar candidates that stay within the current trust
+  boundary were prototyped and measured (7-run mean): threading the `USize`
+  block base through `chacha20SetGoU` gave +1% (the per-block `off.toUSize` is
+  one op per 64 bytes), and a memset pre-fill in place of the `copySlice`
+  memcpy regressed ~22% (safe Lean has no packed-`ByteArray` zero-allocator —
+  `Array.replicate` builds a boxed `Array UInt8`). Both are below a 5% gate, so
+  ChaCha20 is at its scalar floor in safe Lean. Closing the rest of the gap to
+  C's ~1–2 GB/s needs a word-wide (`UInt32`/`UInt64`) `ByteArray` load/store —
+  which Lean can express as an `@[extern]` primitive but which the project
+  declines on trust grounds — or SIMD, which Lean cannot emit.
 - Upstream the generic bridge lemmas (the `ByteArray ↔ List` kit,
   `bitConstrained_card`, `zipWith_take_right`) to Batteries/Mathlib to shrink the
   project-local surface — candidates and locations in

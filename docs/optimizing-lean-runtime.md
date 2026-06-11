@@ -159,6 +159,31 @@ same kind of thing:
   the +11%. On a single 64-byte block the USize and set passes are even within
   run-to-run noise (the guard and base
   setup are not amortized over one block).
+- After that, two further scalar candidates that stay within the trust boundary
+  were prototyped in-tree, measured (7-run mean), and reverted below a 5% gate —
+  a worked example of the measure-first rule paying off by *not* spending proof
+  effort:
+  - Threading the `USize` block base through the loop (carry `offU : USize`,
+    increment it in `USize`, skip the per-block `off.toUSize`): **+1%**. The
+    emitted C had already shown why — `setBlockXorU` does exactly one
+    `lean_usize_of_nat` per 64-byte block, then per byte only `usize_add` +
+    `uget` + `uset` + arithmetic. Reading the C answered this before the
+    prototype; the measurement confirmed it.
+  - Replacing the `copySlice` pre-fill (a memcpy that reads `msg`, whose bytes
+    are then fully overwritten) with a zero-fill that doesn't read `msg`:
+    **−22%**. There is no packed-`ByteArray` zero-allocator in core or
+    Batteries; `⟨Array.replicate n 0⟩` lowers to `lean_mk_array` — a *boxed*
+    `Array UInt8`, not a `lean_sarray` memset — so it is slower than the
+    memcpy. The `copySlice` is the cheap way to materialize a sized buffer in
+    safe Lean.
+
+  Conclusion: the fused pass is at its scalar floor in safe Lean. The remaining
+  gap to C is the byte-at-a-time stores (64 `uset`/block where C does 16 word
+  stores) and the pre-fill pass — both need a trusted word-wide load/store (or
+  uninitialized-alloc) `@[extern]` primitive, or SIMD. The ARX rounds are not
+  the ceiling: scalar C runs the same rounds and reaches ~1–2 GB/s (vs our
+  ~530 MB/s) on identical mixing — so what separates us from it is the per-byte
+  load/store path, not the compute.
 
 ## Robustness to future compiler versions
 

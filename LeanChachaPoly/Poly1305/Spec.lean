@@ -19,14 +19,16 @@ polynomial evaluation in GF(2¹³⁰ - 5).
 ## Module structure
 
   Poly1305.Spec            ← this file: types, definitions, basic properties
-  Poly1305.Security        ← almost-universal / byte-level forgery bound  (capstone)
+  Poly1305.Security        ← security tower: almost-universal → tag-level,
+                             adversary, and conditional forgery bounds  (capstones)
   Poly1305.Injectivity     ← block-encoding injectivity → toBlocks injective  (capstone)
   ── supporting (Poly1305.Spec.*) ──
   Poly1305.Spec.Sum        ← shared summation helper
-  Poly1305.Spec.Blocking   ← block-value bounds, toBlocks ↔ toBlockNats
+  Poly1305.Spec.Blocking   ← block-value bounds, toBlocks ↔ toBlockNats, ⌈L/16⌉
   Poly1305.Spec.Accumulate ← accumulation = polynomial evaluation  (key lemma)
   Poly1305.Spec.Tag        ← tag serialization round-trip / value
   Poly1305.Spec.Clamp      ← clamp matches RFC §2.5.1; clamped key space = 2¹⁰⁶
+  Poly1305.Spec.Primality  ← Nat.Prime (2¹³⁰ − 5), axiom-free Lucas certificate
 
 ## Typing convention
 

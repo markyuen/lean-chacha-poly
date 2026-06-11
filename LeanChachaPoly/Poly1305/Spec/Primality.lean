@@ -517,14 +517,15 @@ end Poly1305.Spec.Primality
 namespace Poly1305.Spec
 
 /-- **The Poly1305 prime is prime.** `2¹³⁰ − 5` is prime, certified axiom-free by
-    the Lucas/Pratt tree in `Primality`. Discharges the `[Fact (Nat.Prime P)]`
-    hypothesis the security bounds carry. -/
+    the Lucas/Pratt tree in `Primality`. This is what makes the field-level security
+    bounds unconditional — `ZMod P` is a field. -/
 theorem prime_P : Nat.Prime P := by
   show Nat.Prime (2 ^ 130 - 5)
   exact Primality.p_1361129467683753853853498429727072845819
 
-/-- Global instance: every `[Fact (Nat.Prime P)]` security theorem is now
-    unconditionally instantiable, with no added axiom. -/
+/-- Global instance supplying `Fact (Nat.Prime P)` (with no added axiom). The
+    security theorems resolve it directly to get `ZMod P`'s field structure; they
+    carry no primality hypothesis. -/
 instance : Fact (Nat.Prime P) := ⟨prime_P⟩
 
 end Poly1305.Spec

@@ -21,8 +21,8 @@ with the message.
 ## Module structure
 
   ChaCha20.Spec               ← this file: types and definitions
-  ChaCha20.Correctness          ← chacha20_length / chacha20_involutive
-  ChaCha20.Spec.QuarterRound  ← rotation/XOR lemmas, RFC test vector
+  ChaCha20.Correctness        ← chacha20_length / chacha20_involutive
+  ChaCha20.Spec.QuarterRound  ← rotation/XOR invertibility lemmas
   ChaCha20.Spec.Keystream     ← keystream length
   ChaCha20.Spec.Seek          ← CTR seekability
   ChaCha20.Spec.Permutation   ← quarterRound is a bijection

@@ -112,9 +112,11 @@ push pass vs ~220 MB/s for the retained two-pass vs ~14 MB/s spec; Poly1305
 ~1.1 GB/s fast (limb engine) vs ~17 MB/s for the retained Nat engine vs
 ~3 MB/s spec; AEAD ~320 MB/s fast vs ~2 MB/s spec.
 
-These optimizations were driven by reading the **emitted C**
-(`.lake/build/ir/**.c`) rather than by intuition — the first theory about the
-ChaCha20 bottleneck was wrong, and a grep settled it. The full workflow
+The **ChaCha20** fast pass was driven by reading the **emitted C**
+(`.lake/build/ir/**.c`) rather than by intuition — the first theory about its
+bottleneck was wrong, and a grep settled it. (The Poly1305 limb engine, by
+contrast, is an algorithmic port of poly1305-donna, not an emitted-C finding.)
+The full workflow
 (profiling allocations and boxing by grep, the `static inline` vs
 `LEAN_EXPORT` runtime distinction, verifying the optimized shape landed,
 measure-before-prove gating), plus a discussion of which speedups are
@@ -166,7 +168,9 @@ LeanChachaPoly/
     ChaCha20.lean            unboxed 16-word state, fused keystream-XOR pass
     Poly1305.lean            5×26-bit UInt64 limb engine (+ Nat-engine baseline)
     Aead.lean                fast AEAD composition
-    Bridge/{ByteList, ChaCha20, Poly1305, Poly1305Limb, Aead}.lean  fast = spec  ← capstones
+    Bridge/{ByteList, ChaCha20, Poly1305, Poly1305Limb, Aead}.lean
+                             fast = spec                                 ← capstones
+  Statements.lean            the capstones restated in one file (reading list)
 Tests/                       RFC 8439 + Wycheproof vectors (spec + fast) + differential + axiom guard
 Bench/                       lake exe bench — fast vs spec throughput
 ```

@@ -31,7 +31,8 @@ content beyond what was proved in ChaCha20.Spec and Poly1305.Spec.
 
   Aead.Spec               ← this file: construction (encrypt/decrypt) only
   Aead.Correctness        ← roundtrip + length/shape capstones
-  Aead.Security           ← authenticity: verify-before-decrypt, macData injectivity
+  Aead.Security           ← authenticity: verify-before-decrypt, macData
+                            injectivity, AEAD forgery bound
   Aead.Spec.KeyDerivation ← derivePolyKey, padTo16/le64 lemmas
   Aead.Spec.MacData       ← macData injectivity lemmas
 -/

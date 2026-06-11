@@ -739,8 +739,7 @@ set_option linter.constructorNameAsVariable false in
 /-- **Key lemma (one-time-pad uniformity).** Conditioning on the observed tag does not
     skew the multiplier: for each clamped `r` exactly one pad `s` yields tag `t` on
     `M`, so the observed-tag event has exactly `2¹⁰⁶` keys — the same count as the
-    unconditional space. This is the s-cancellation made explicit (the never-formalized
-    piece the pruned `tag_mask_*` lemmas gestured at). -/
+    unconditional space. This is the one-time-pad property of `s`, made explicit. -/
 theorem observed_card (M : List UInt8) (t : Bytes 16) :
     (keySpace.filter (observed M t)).card = 2 ^ 106 := by
   classical

@@ -74,6 +74,11 @@ info: 'Poly1305.Spec.poly1305_adversary_forgery_multi_prob' depends on axioms: [
 -/
 #guard_msgs in #print axioms Poly1305.Spec.poly1305_adversary_forgery_multi_prob
 
+-- The Pratt/Lucas certificate uses kernel `decide` (not `native_decide`), so it
+-- adds no compiler-trust axiom — only the three foundational axioms.
+/-- info: 'Poly1305.Spec.prime_P' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Poly1305.Spec.prime_P
+
 /-! ## AEAD -/
 
 /-- info: 'Aead.Spec.decrypt_encrypt' depends on axioms: [propext, Classical.choice, Quot.sound] -/

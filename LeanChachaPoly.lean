@@ -12,6 +12,7 @@ import LeanChachaPoly.Poly1305.Spec.Blocking
 import LeanChachaPoly.Poly1305.Spec.Accumulate
 import LeanChachaPoly.Poly1305.Spec.Clamp
 import LeanChachaPoly.Poly1305.Spec.Tag
+import LeanChachaPoly.Poly1305.Spec.Primality
 import LeanChachaPoly.Poly1305.Injectivity
 import LeanChachaPoly.Poly1305.Security
 import LeanChachaPoly.Aead.Spec

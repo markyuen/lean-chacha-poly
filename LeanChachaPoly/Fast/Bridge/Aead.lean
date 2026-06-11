@@ -58,7 +58,7 @@ theorem macData_toList (aad ct : ByteArray) :
     (macData aad ct).data.toList
       = (Aead.Spec.macData aad.data.toList ct.data.toList).val := by
   rw [macData, Aead.Spec.macData_val, pushLe64_toList, pushLe64_toList,
-    toList_append, padTo16_toList, padTo16_toList]
+    ByteArray.toList_data_append, padTo16_toList, padTo16_toList]
   simp
 
 /-! ## Constant-time tag comparison -/
@@ -82,7 +82,7 @@ theorem ctEq_toList_beq (a b : ByteArray) :
 theorem encrypt_eq_spec (key : Key) (nonce : Nonce) (pt aad : ByteArray) :
     (encrypt key nonce pt aad).data.toList
       = Aead.Spec.encrypt key.toSpec nonce.toSpec pt.data.toList aad.data.toList := by
-  rw [encrypt, Aead.Spec.encrypt, toList_append,
+  rw [encrypt, Aead.Spec.encrypt, ByteArray.toList_data_append,
     Poly1305.Fast.poly1305_eq_spec, derivePolyKey_eq, macData_toList,
     ChaCha20.Fast.chacha20_eq_spec]
 

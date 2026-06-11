@@ -327,8 +327,10 @@ private theorem keystream_le_64 (k : ChaCha20.Spec.Key) (n : ChaCha20.Spec.Nonce
 private theorem keystream_zero (k : ChaCha20.Spec.Key) (n : ChaCha20.Spec.Nonce)
     (ctr : UInt32) : ChaCha20.Spec.keystream k n ctr 0 = [] := rfl
 
-/-- `zipWith` ignores second-list elements beyond the first list's length
-    (not in core or Mathlib). -/
+/-- `zipWith` ignores second-list elements beyond the first list's length, so
+    taking the right operand to the left's length is a no-op. A specialized
+    corollary of core's `List.zipWith_eq_zipWith_take_min`; proved here by
+    direct induction. -/
 private theorem zipWith_take_right {α β γ : Type} (f : α → β → γ) :
     ∀ (l : List α) (l₂ : List β),
       List.zipWith f l (l₂.take l.length) = List.zipWith f l l₂

@@ -1,40 +1,11 @@
 # Upstream candidates
 
-Lemmas in this repo that are generic enough to live in Batteries or Mathlib
-rather than here. Upstreaming them shrinks the bridge surface (the docs identify
-proof churn as the fragile axis) and removes project-local restatements of facts
-the ecosystem should own. This file records the candidates and their exact
-locations; the PRs themselves are not yet filed.
+This repo proves a number of small `List`/`ByteArray` lemmas for the bridge.
+Checked against Lean core v4.29.1 (this repo's toolchain) and Mathlib v4.29.1,
+one is general enough to upstream; the rest are already in core or a one-step
+composition of core lemmas, and are recorded below so they are not re-filed.
 
-Before filing any of these, check the current Batteries/Mathlib for an existing
-statement — several of these are the kind of lemma that may already have landed
-under a different name.
-
-## Priority 1 — `Batteries.Data.ByteArray`
-
-The `ByteArray ↔ List.toList` correspondence lemmas in
-[`LeanChachaPoly/Fast/Bridge/ByteList.lean`](../LeanChachaPoly/Fast/Bridge/ByteList.lean).
-All are axiom-free and depend only on core Lean + Batteries (no Mathlib); the
-rewrite-shaped ones (`toList_push`, `toList_append`, `toList_extract`,
-`toList_emptyWithCapacity`, `toList_toByteArray`, `length_toList`) are `@[simp]`:
-
-| Lemma | Statement |
-|---|---|
-| `toList_push` | `(b.push u).data.toList = b.data.toList ++ [u]` |
-| `toList_append` | `(a ++ b).data.toList = a.data.toList ++ b.data.toList` |
-| `toList_extract` | `(b.extract s e).data.toList = ((b.data.toList).drop s).take (e - s)` |
-| `toList_emptyWithCapacity` | `(ByteArray.emptyWithCapacity n).data.toList = []` |
-| `toList_toByteArray` | `l.toByteArray.data.toList = l` |
-| `toByteArray_toList` | `b.data.toList.toByteArray = b` |
-| `toList_inj` | injectivity of `(·.data.toList)` |
-| `length_toList` | `b.data.toList.length = b.size` |
-| `getElem_toList` | indexing correspondence |
-| `beq_eq_toList_beq` | `(a == b) = (a.data.toList == b.data.toList)` |
-
-Batteries already carries some `ByteArray` API; check for overlap before PRing,
-and keep only the lemmas it does not yet have.
-
-## Priority 2 — `Mathlib.Data.Finset.Card` (or `Mathlib.Data.Nat.Bits`)
+## `bitConstrained_card` → Mathlib
 
 `bitConstrained_card` in
 [`LeanChachaPoly/Poly1305/Spec/Clamp.lean`](../LeanChachaPoly/Poly1305/Spec/Clamp.lean)
@@ -48,37 +19,46 @@ theorem bitConstrained_card (N : Nat) (Q : Fin N → Prop) [DecidablePred Q]
 ```
 
 The numbers below `2^N` whose bits at the positions satisfying `Q` are
-prescribed by `v` number exactly `2 ^ (#¬Q)`. Pure combinatorics over
-`Finset.range` and `Nat.testBit` with no crypto context; the proof bijects such
-numbers with bit-assignments via `Finset.card_nbij'`. Drop the `private` and
-generalize the docstring on the way up.
+prescribed by `v` number exactly `2 ^ (#¬Q)`. Combinatorics over `Finset.range`
+and `Nat.testBit` with no crypto context; the proof bijects such numbers with
+bit-assignments via `Finset.card_nbij'`.
 
-## Priority 3 — `Batteries.Data.List.ZipWith`
+No analogue found in Mathlib: a search for a `filter … testBit … card` or
+`2 ^ (… filter … card)` bit-counting statement returns nothing. Home would be
+`Mathlib.Data.Nat.Bits`. Drop the `private` and generalize the docstring on the
+way up.
 
-`zipWith_take_right` in
+## Already in core — not candidates
+
+Each of these is a project-local name for a fact core already proves, or a short
+composition of core lemmas. Listed with the core lemmas that subsume them.
+
+**`zipWith_take_right`** in
 [`LeanChachaPoly/Fast/Bridge/ChaCha20.lean`](../LeanChachaPoly/Fast/Bridge/ChaCha20.lean)
-(currently `private`):
+(`zipWith f l (l₂.take l.length) = zipWith f l l₂`). Its general form is core's
+`List.zipWith_eq_zipWith_take_min`, from which the right-take shape follows in
+three lines (two `rw`, one `simp [List.length_take, List.take_take]`). The repo
+proves it by direct induction instead; a local choice, not a missing fact.
 
-```lean
-theorem zipWith_take_right {α β γ : Type} (f : α → β → γ) :
-    ∀ (l : List α) (l₂ : List β),
-      List.zipWith f l (l₂.take l.length) = List.zipWith f l l₂
-```
+**The `ByteArray ↔ List` kit** in
+[`LeanChachaPoly/Fast/Bridge/ByteList.lean`](../LeanChachaPoly/Fast/Bridge/ByteList.lean).
+The bridge rewrites through `b.data.toList`; core proves the facts that path
+needs one layer lower, on `.data` (the `Array`): `data_push`, `data_append`,
+`data_extract`, `size_data`, `getElem_eq_getElem_data`, `List.data_toByteArray`,
+`List.toByteArray_inj` (in `Init/Data/ByteArray/{Basic,Bootstrap,Lemmas}.lean`).
+Each `ByteList` lemma composes one of those with the matching `Array.toList_*`
+lemma to land on `(·.data.toList)` under one name — bare `simp` closes the same
+goals from core alone. `append` and `toByteArray` are already core in the
+`(·.data.toList)` shape (`ByteArray.toList_data_append`,
+`List.toList_data_toByteArray`).
 
-`zipWith` ignores second-list elements beyond the first list's length, so taking
-the right operand to the left's length is a no-op. No dependencies beyond
-`List.zipWith` / `List.take`.
-
-## Lower priority — splice/segment helpers
-
-Also in [`LeanChachaPoly/Fast/Bridge/ChaCha20.lean`](../LeanChachaPoly/Fast/Bridge/ChaCha20.lean),
-useful but born from the byte-stream bridge and needing API design before they
-would fit a general home:
-
-- `set4_splice` — four consecutive `List.set` operations compose into a
-  take-append-drop splice.
-- `zipWith_seg` — splitting `zipWith` over segments.
-- `take_set_succ` — `(L.set k v).take (k + 1) = L.take k ++ [v]`.
-
-Check the Batteries `List` roadmap before filing; these may want to be stated in
-terms of an existing splice/segment API rather than added piecemeal.
+**Splice/segment helpers** (`set4_splice`, `zipWith_seg`, `take_set_succ`) in
+[`LeanChachaPoly/Fast/Bridge/ChaCha20.lean`](../LeanChachaPoly/Fast/Bridge/ChaCha20.lean).
+The core `List` splice/segment API already exists — `set_eq_take_append_cons_drop`,
+`take_set`, `take_add_one`, `set_eq_of_length_le`, `getElem?_set_self`,
+`zipWith_append`, `take_add`, `drop_drop` — and these helpers are
+compositions of it: `take_set_succ`'s proof composes `take_add_one`,
+`take_set`, `set_eq_of_length_le`, and `getElem?_set_self`; `zipWith_seg`'s own proof is
+`rw [take_add, drop_drop, zipWith_append]`; `set4_splice` iterates
+`set_eq_take_append_cons_drop` four times. Project-specific shapes over an
+existing API, so they stay local.

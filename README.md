@@ -206,9 +206,10 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   load/store (an `@[extern]` primitive the project declines on trust grounds) or
   SIMD, which Lean cannot emit. The measurements and the trust-boundary argument
   are in [docs/optimizing-lean-runtime.md](docs/optimizing-lean-runtime.md).
-- Upstream the generic bridge lemmas (the `ByteArray ↔ List` kit,
-  `bitConstrained_card`, `zipWith_take_right`) to Batteries/Mathlib to shrink the
-  project-local surface — candidates and locations in
+- Upstream `bitConstrained_card` (the bit-counting lemma behind the clamped
+  key-space cardinalities) to Mathlib — the one project-local generic lemma
+  without an upstream analogue. The bridge's `ByteArray ↔ List` kit turned out
+  already in core or a one-step composition of core lemmas; see
   [docs/upstream-candidates.md](docs/upstream-candidates.md).
 
 ## References

@@ -286,8 +286,10 @@ A second external audit pass drove five changes:
   whole-array `ctEq` (no first-mismatch branch) bridged by `ctEq_toList_beq`
   under an unchanged capstone; the spec keeps `==` for readability with
   `decryptCT` / `decryptCT_eq_decrypt` as the proved-equal variant.
-- **Upstream candidates recorded** (`docs/upstream-candidates.md`): the generic
-  `ByteArray ↔ List` kit, `bitConstrained_card`, `zipWith_take_right`.
+- **Upstream candidates recorded** (`docs/upstream-candidates.md`): a later
+  check against core v4.29.1 left `bitConstrained_card` as the only genuine
+  candidate; the `ByteArray ↔ List` kit, `zipWith_take_right`, and the
+  splice/segment helpers are already in core or one-step compositions of it.
 
 A follow-up review pass added two refinements:
 

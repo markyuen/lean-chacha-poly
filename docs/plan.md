@@ -7,8 +7,9 @@ axiom-clean (`{propext, Classical.choice, Quot.sound}`).
 
 > **Correction to the original scope.** The first design notes described this as an
 > "axiom-free, Mathlib-free" project with security "out of scope." That turned out to be
-> too pessimistic: the Poly1305 *information-theoretic* security results **are** provable
-> in Lean and now form the centerpiece (using Mathlib's `Polynomial`/`ZMod`). The
+> too pessimistic: the Poly1305 information-theoretic security results are provable
+> in Lean and are now the project's main security results (using Mathlib's
+> `Polynomial`/`ZMod`). The
 > quarter-round bijection was at first the one non-foundational dependency (a `bv_decide`
 > SAT certificate); it is now reproved algebraically, so every capstone closes over the
 > three foundational axioms alone.
@@ -30,7 +31,7 @@ Defined the three primitives over `List UInt8` and proved the functional capston
 
 Validated against the RFC 8439 test vectors (`Tests/`).
 
-## Stage 2 — Information-theoretic security (the centerpiece)
+## Stage 2 — Information-theoretic security
 
 Built the Poly1305 unforgeability argument as a tower:
 
@@ -89,7 +90,7 @@ Addressed in full:
   `poly1305` and its 16-byte tags; the proof derives the cancellation of the one-time
   pad `s` by subtracting the two tag equations (via `poly1305_value`). Bounds stated
   as `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉` via the new `toBlockNats_length`.
-- **The towers meet** (`aead_forgery_bound`, `aead_forgery_prob` in `Aead/Security`):
+- **The towers joined** (`aead_forgery_bound`, `aead_forgery_prob` in `Aead/Security`):
   `macData_inj` + the tag-level theorem give the AEAD forgery probability under the
   uniform-poly-key model hypothesis (= the ChaCha20-PRF idealization);
   `decrypt_accepts` ties acceptance to the counted tag equation.
@@ -249,20 +250,14 @@ work (register-threading alone = 1.13x, below the 1.2x gate; combined = 1.58x):
   code); the ChaCha20 phases remove Lean-runtime overhead rather than change
   the algorithm (directions universal, magnitudes machine-specific); compiler
   evolution can make these wins redundant but never harmful or unsound, and
-  the retained engines + bench rows are the hedge — the genuinely
+  the retained engines + bench rows are the hedge — the
   version-fragile axis is proof churn on toolchain bumps.
 
-### How the compiled code was inspected
-
-Phase D's design came from reading the emitted C
-(`.lake/build/ir/<Module/Path>.c`), not from guessing — the first guess
-("allocation in the round function") was wrong, and a
-`grep -c lean_alloc_ctor` settled it in seconds. The full reusable workflow
-(allocation profiling by grep, reading `lean_is_exclusive` reuse branches,
-spotting boxed-`Nat` arithmetic in signatures, the `static inline` vs
-`LEAN_EXPORT` distinction in `lean.h` that motivated the set-based writer,
-verifying the optimized shapes landed, and the measure-before-prove gate
-discipline) is documented in
+Phase D's design came from reading the emitted C, not from guessing: the first
+guess ("allocation in the round function") was wrong, and a
+`grep -c lean_alloc_ctor` disproved it. The reusable workflow — allocation
+profiling by grep, the `static inline` vs `LEAN_EXPORT` distinction that
+motivated the set-based writer, and the measure-before-prove gate — is in
 [optimizing-lean-runtime.md](optimizing-lean-runtime.md).
 
 ## Hardening round (2026-06-11)
@@ -280,7 +275,9 @@ A second external audit pass drove five changes:
   reduction was infeasible and budgeted for an `ofReduceBool` trade-off; the
   audit disproved that with a 10-line prototype, and the axiom-free version is
   what landed. Every security theorem then dropped its `[Fact (Nat.Prime P)]`
-  hypothesis — the bounds are unconditional and instantiable.
+  hypothesis — the bounds are unconditional and instantiable. The factor tree,
+  witnesses, and the `powMod`/`decide` mechanism are in
+  [primality-certificate.md](primality-certificate.md).
 - **Wycheproof vectors** (`Tests/WycheproofTest.lean`): all 316 96-bit-nonce
   cases of C2SP `chacha20_poly1305_test.json` (256 valid, 60 invalid), verified
   byte-identical against upstream during the audit, run through both the spec
@@ -299,7 +296,7 @@ A follow-up review pass added two refinements:
   key modelled as `(r, s)`. The new content is `observed_card` — the one-time pad
   makes the observed tag independent of the multiplier `r`, so the denominator is
   `2¹⁰⁶` for every `t`; `observed_iff_poly1305` ties the value-level event to the
-  byte-level `poly1305 key M = t` via `leToNat16_inj`, so the bound is literally
+  byte-level `poly1305 key M = t` via `leToNat16_inj`, so the bound is stated
   about tag bytes.
 - **`Statements.lean`**: the capstones restated in plain vocabulary, each proved
   as a one-line corollary of the result it names — a referee's reading list that
@@ -342,15 +339,6 @@ proven fallback.
   `chacha20_eq_setPass`; the bench gains a runtime differential check of the
   guarded pass against `chacha20Push` at boundary lengths.
 
-## Future work
-
-- **Faster ChaCha20.** `USize` indexing (`uget`/`uset` behind a
-  `msg.size < USize.size` guard, `chacha20Push` as the proven fallback) is
-  implemented: +11% on full blocks (476 → 530 MB/s at 64 KiB), ~70 lines of
-  bridge glue since the USize engine reduces to the `getElem`/`set` engine
-  pointwise. ChaCha20 (~530 MB/s) is still the AEAD bottleneck vs limb
-  Poly1305's ~1.1 GB/s. Open: thread the `USize` block base through
-  `chacha20SetGoU` and add a small-message path (the single-64-byte-block case
-  is even-to-slightly-slower); SIMD is outside Lean's current reach.
-- **Upstream the generic lemmas** to Batteries/Mathlib per
-  [upstream-candidates.md](upstream-candidates.md).
+This is the last entry in the development log. Open directions — further
+ChaCha20 speedups and upstreaming the generic lemmas — are tracked in the
+[README's Future work section](../README.md#future-work).

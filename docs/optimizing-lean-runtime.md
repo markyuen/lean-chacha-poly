@@ -9,8 +9,8 @@ any Lean 4 project with a hot path.
 **A note on novelty**: the components are standard — inspecting generated code
 is ordinary systems practice, the reuse/exclusivity model is documented in the
 Lean compiler papers (Ullrich & de Moura, *Counting Immutable Beans*), and the
-runtime header is public. What seems genuinely uncommon is the assembled
-workflow for *application* authors: using the emitted C as a greppable
+runtime header is public. Less commonly written up is the assembled
+workflow for application authors: using the emitted C as a greppable
 profiling surface to decide what to optimize, and (in a verified setting)
 gating proof investment on measured wins. We found no comparable write-up;
 the ecosystem knowledge mostly lives in Zulip threads.
@@ -88,7 +88,7 @@ push-per-byte writer (64 runtime calls per 64-byte block) with
 byte). Register-threading alone measured 1.13x; with the set-based writer the
 combination measured 1.58x.
 
-### 5. Verify the optimized shape actually landed
+### 5. Verify the optimized shape landed
 
 After a change, re-read the new function's C. What good looks like:
 
@@ -129,7 +129,7 @@ same kind of thing:
 - The **Poly1305 limb engine** (Phase B) is an *algorithmic* change — the
   radix-2²⁶ representation with the `2¹³⁰ ≡ 5` wrap folded into the products
   is what every production implementation (poly1305-donna) uses, in any
-  language. It came with genuinely new verified mathematics (the schoolbook-
+  language. It came with new verified mathematics (the schoolbook-
   product wrap identity, carry-chain correctness).
 - The **ChaCha20 phases** (C and D) are *not* algorithmic — the ARX operation
   count is unchanged. They remove overhead the Lean runtime adds that C never
@@ -239,8 +239,7 @@ third and fourth slots only — but its contribution to the third is real:
 - It strengthens the artifact's **credibility on its performance claim**. An
   earlier audit of this repo deleted a "Native" layer whose equivalence
   theorems were vacuous wrappers; the verified fast implementation is the
-  response, and it has to be non-toy to count. AEAD at ~344 MB/s is in
-  "actually deployable on a single core" territory, and each superseded
+  response. AEAD at ~344 MB/s is deployable on a single core, and each superseded
   engine retained with an engines-agree theorem is evidence the bridge
   methodology survives optimization pressure: three substantial rewrites of
   the same function under an unchanged capstone.

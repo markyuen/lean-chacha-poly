@@ -230,6 +230,10 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   `USize` indexing (~+12%, prototyped), which needs a `msg.size < USize.size`
   guard branch and substantial bridge glue; SIMD is outside Lean's current
   reach.
+- Upstream the generic bridge lemmas (the `ByteArray ↔ List` kit,
+  `bitConstrained_card`, `zipWith_take_right`) to Batteries/Mathlib to shrink the
+  project-local surface — candidates and locations in
+  [docs/upstream-candidates.md](docs/upstream-candidates.md).
 
 ## References
 

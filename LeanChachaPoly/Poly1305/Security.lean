@@ -5,6 +5,7 @@ import LeanChachaPoly.Poly1305.Spec.Accumulate
 import LeanChachaPoly.Poly1305.Spec.Clamp
 import LeanChachaPoly.Poly1305.Spec.Tag
 import LeanChachaPoly.Poly1305.Injectivity
+import LeanChachaPoly.Poly1305.Spec.Primality
 import Mathlib.Algebra.Field.ZMod
 import Mathlib.Algebra.Polynomial.Roots
 import Mathlib.Data.Real.Basic
@@ -37,8 +38,9 @@ The argument, in order:
    published Poly1305 forgery probability `8⌈L/16⌉ / 2¹⁰⁶`.
 
 `ZMod P` is a field only when `P` is prime. `2¹³⁰ − 5` is the Poly1305 prime,
-but a 40-digit primality certificate is out of scope here, so the
-field-dependent results are parameterized on `[Fact (Nat.Prime P)]`.
+proved in `Poly1305/Spec/Primality.lean` (`prime_P`, axiom-free), which provides
+the `Fact (Nat.Prime P)` instance these field-dependent results resolve — so the
+bounds are unconditional, not parameterized on an assumed primality.
 -/
 
 namespace Poly1305.Spec
@@ -281,8 +283,8 @@ theorem msgPoly_ne (B B' : List Nat)
 /-! ## The forgery bound (almost-universal hashing)
 
     `ZMod P` is a field exactly when `P` is prime; `P = 2¹³⁰ − 5` is the Poly1305
-    prime. Its 40-digit primality is taken as the hypothesis `[Fact P.Prime]`
-    rather than discharged here (that needs a Pratt certificate). -/
+    prime, discharged axiom-free in `Poly1305/Spec/Primality.lean` (`prime_P`),
+    whose `Fact (Nat.Prime P)` instance these results resolve. -/
 
 /-- **Capstone.** Almost-universal hashing: over the prime field `ZMod P`, two
     distinct messages (as field-element, nonzero block lists) collide under Poly1305
@@ -290,7 +292,7 @@ theorem msgPoly_ne (B B' : List Nat)
     information-theoretic core of Poly1305 unforgeability — a colliding `r` is a root
     of the nonzero difference polynomial, and a degree-`n` polynomial over a field has
     at most `n` roots. -/
-theorem poly1305_almost_universal [Fact (Nat.Prime P)] (B B' : List Nat)
+theorem poly1305_almost_universal (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') :
     (Finset.univ.filter
@@ -326,7 +328,7 @@ theorem poly1305_almost_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     − C c`; `D` stays nonzero for *any* constant `c` because the polynomial difference
     has no constant term (every `msgPoly` monomial is `X^(k+1)`), so degree ≥ 1 and
     subtracting a constant cannot zero it. -/
-theorem poly1305_almost_delta_universal [Fact (Nat.Prime P)] (B B' : List Nat)
+theorem poly1305_almost_delta_universal (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (c : ZMod P) :
     (Finset.univ.filter (fun r : ZMod P =>
@@ -371,7 +373,7 @@ theorem poly1305_almost_delta_universal [Fact (Nat.Prime P)] (B B' : List Nat)
     keys causing a byte-level collision are covered by a finite set `cands` of
     field-offsets `c` (each collision realizing `eval B = eval B' + c`), then the
     number of such keys is at most `|cands| · max #blocks`. -/
-theorem collision_union_bound [Fact (Nat.Prime P)] (B B' : List Nat)
+theorem collision_union_bound (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (cands : Finset (ZMod P)) :
     (Finset.univ.filter (fun r : ZMod P =>
@@ -440,7 +442,7 @@ theorem accumulate_eq_eval_val (r : Nat) (B : List Nat) :
     models the forger's situation: `Δ` is determined by the observed tag and
     the forged tag — `poly1305_tag_forgery` below carries this out at the tag
     level, deriving the cancellation of the one-time pad `s`. -/
-theorem poly1305_byte_forgery [Fact (Nat.Prime P)] (B B' : List Nat)
+theorem poly1305_byte_forgery (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (Δ : ℤ) :
     (Finset.univ.filter (fun r : ZMod P =>
@@ -510,7 +512,7 @@ theorem toBlockNats_pos (msg : List UInt8) : ∀ b ∈ toBlockNats msg, 0 < b �
     `M ≠ M'`, the Poly1305 polynomials collide for at most `max #blocks` keys
     `r : ZMod P`. The encoding injectivity (`toBlockNats_inj`, from `Injectivity`)
     lifts the block-list hypothesis to plain message inequality. -/
-theorem poly1305_almost_universal_msg' [Fact (Nat.Prime P)] (M M' : List UInt8)
+theorem poly1305_almost_universal_msg' (M M' : List UInt8)
     (hne : M ≠ M') :
     (Finset.univ.filter (fun r : ZMod P =>
       (msgPoly (blockNats (toBlocks M))).eval r
@@ -558,7 +560,7 @@ theorem clampedKeys_card : clampedKeys.card = 2 ^ 106 := by
     clamped keys are a subset of the bad field keys, so clamping never *adds*
     forgeries; the denominator is `clampedKeys_card`. The tag-level capstone
     (`poly1305_tag_forgery_prob`) restates this at the level of `poly1305` outputs. -/
-theorem poly1305_clamped_forgery_prob [Fact (Nat.Prime P)] (B B' : List Nat)
+theorem poly1305_clamped_forgery_prob (B B' : List Nat)
     (hpos : ∀ b ∈ B, 0 < b ∧ b < P) (hpos' : ∀ b ∈ B', 0 < b ∧ b < P)
     (hne : B ≠ B') (Δ : ℤ) :
     ((clampedKeys.filter (fun r : ZMod P =>
@@ -593,7 +595,7 @@ open scoped Classical in
     admitting *any* key (i.e. any pad `s`) that tags `M` as `t` and `M'` as `t'`
     number at most `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉` — the published `8⌈L/16⌉` factor,
     with `⌈L/16⌉` written as `(L + 15) / 16`. -/
-theorem poly1305_tag_forgery [Fact (Nat.Prime P)] (M M' : List UInt8)
+theorem poly1305_tag_forgery (M M' : List UInt8)
     (hne : M ≠ M') (t t' : Bytes 16) :
     (clampedKeys.filter (fun r : ZMod P =>
       ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
@@ -675,7 +677,7 @@ open scoped Classical in
     tag level: with the key component `r` uniform over the `2¹⁰⁶` clamped values, a
     forger who must turn an observed tag `t` on `M` into a tag `t'` on `M' ≠ M`
     succeeds with probability at most `8 · max ⌈|M|/16⌉ ⌈|M'|/16⌉ / 2¹⁰⁶`. -/
-theorem poly1305_tag_forgery_prob [Fact (Nat.Prime P)] (M M' : List UInt8)
+theorem poly1305_tag_forgery_prob (M M' : List UInt8)
     (hne : M ≠ M') (t t' : Bytes 16) :
     ((clampedKeys.filter (fun r : ZMod P =>
       ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
@@ -702,7 +704,7 @@ open scoped Classical in
     `(A t).1 ≠ M`, the clamped keys consistent with the observed tag `t` on `M`
     under which `A` also forges number at most `8 · max ⌈|M|/16⌉ ⌈|(A t).1|/16⌉`.
     Reduces to `poly1305_tag_forgery` at `M' := (A t).1`, `t' := (A t).2`. -/
-theorem poly1305_adversary_forgery [Fact (Nat.Prime P)]
+theorem poly1305_adversary_forgery
     (M : List UInt8) (t : Bytes 16)
     (A : Bytes 16 → List UInt8 × Bytes 16) (hne : (A t).1 ≠ M) :
     (clampedKeys.filter (fun r : ZMod P =>
@@ -716,7 +718,7 @@ open scoped Classical in
     forger `A`, the fraction of clamped keys (uniform over the `2¹⁰⁶` values)
     consistent with the observed tag under which `A` forges is at most
     `8 · max ⌈|M|/16⌉ ⌈|(A t).1|/16⌉ / 2¹⁰⁶`. -/
-theorem poly1305_adversary_forgery_prob [Fact (Nat.Prime P)]
+theorem poly1305_adversary_forgery_prob
     (M : List UInt8) (t : Bytes 16)
     (A : Bytes 16 → List UInt8 × Bytes 16) (hne : (A t).1 ≠ M) :
     ((clampedKeys.filter (fun r : ZMod P =>
@@ -731,7 +733,7 @@ open scoped Classical in
     forgeries `A 0, …, A (v-1)` succeeds for at most `v` times the single-shot
     bound: if every candidate message has length `≤ L` and differs from `M`, the
     clamped keys under which *some* attempt forges number at most `v · 8⌈L/16⌉`. -/
-theorem poly1305_adversary_forgery_multi [Fact (Nat.Prime P)]
+theorem poly1305_adversary_forgery_multi
     (M : List UInt8) (t : Bytes 16) (v : ℕ)
     (A : Fin v → List UInt8 × Bytes 16) (hne : ∀ i, (A i).1 ≠ M)
     (L : ℕ) (hL : M.length ≤ L) (hLi : ∀ i, (A i).1.length ≤ L) :
@@ -777,7 +779,7 @@ open scoped Classical in
 /-- **Capstone.** The `v`-attempt forgery probability: against a forger making `v`
     attempts (every candidate of length `≤ L`, distinct from `M`), the fraction of
     clamped keys under which some attempt forges is at most `v · 8⌈L/16⌉ / 2¹⁰⁶`. -/
-theorem poly1305_adversary_forgery_multi_prob [Fact (Nat.Prime P)]
+theorem poly1305_adversary_forgery_multi_prob
     (M : List UInt8) (t : Bytes 16) (v : ℕ)
     (A : Fin v → List UInt8 × Bytes 16) (hne : ∀ i, (A i).1 ≠ M)
     (L : ℕ) (hL : M.length ≤ L) (hLi : ∀ i, (A i).1.length ≤ L) :

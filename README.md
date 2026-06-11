@@ -185,10 +185,10 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 
 - **Primality of `P = 2¹³⁰ − 5`** *(discharged).* The field-level forgery bounds need
   `ZMod P` to be a field, i.e. `P` prime. This 40-digit primality is proved by an
-  axiom-free Lucas/Pratt certificate (`prime_P`, `Poly1305/Spec/Primality.lean`), which
-  also provides `instance : Fact (Nat.Prime P)` — so the security theorems retain the
-  `[Fact (Nat.Prime P)]` hypothesis for modularity but are now unconditionally
-  instantiable. The certificate's modular exponentiations are evaluated by the *kernel*
+  axiom-free Lucas/Pratt certificate (`prime_P`, `Poly1305/Spec/Primality.lean`), whose
+  `instance : Fact (Nat.Prime P)` the security theorems resolve directly — they carry no
+  primality hypothesis and are unconditional statements. The certificate's modular
+  exponentiations are evaluated by the *kernel*
   through a fuel-based `powMod` and plain `decide`, so it adds no axiom (`#print axioms
   prime_P` is `[propext, Classical.choice, Quot.sound]`) — see
   [docs/primality-certificate.md](docs/primality-certificate.md).

@@ -173,7 +173,7 @@ open scoped Classical in
     length bounds), then the clamped one-time keys under which the original pair
     tags as `t` *and* the forged pair tags as `t'` number at most
     `8 · max ⌈L/16⌉ ⌈L'/16⌉`, where `L, L'` are the `macData` lengths. -/
-theorem aead_forgery_bound [Fact (Nat.Prime P)] (aad ct aad' ct' : List UInt8)
+theorem aead_forgery_bound (aad ct aad' ct' : List UInt8)
     (ha : aad.length < 2 ^ 64) (hc : ct.length < 2 ^ 64)
     (ha' : aad'.length < 2 ^ 64) (hc' : ct'.length < 2 ^ 64)
     (hne : (aad, ct) ≠ (aad', ct')) (t t' : Bytes 16) :
@@ -193,7 +193,7 @@ open scoped Classical in
     over the `2¹⁰⁶` clamped values (the ChaCha20-PRF idealization), an attacker who
     modifies `(aad, ct)` produces an accepted forgery with probability at most
     `8 · max ⌈L/16⌉ ⌈L'/16⌉ / 2¹⁰⁶`. -/
-theorem aead_forgery_prob [Fact (Nat.Prime P)] (aad ct aad' ct' : List UInt8)
+theorem aead_forgery_prob (aad ct aad' ct' : List UInt8)
     (ha : aad.length < 2 ^ 64) (hc : ct.length < 2 ^ 64)
     (ha' : aad'.length < 2 ^ 64) (hc' : ct'.length < 2 ^ 64)
     (hne : (aad, ct) ≠ (aad', ct')) (t t' : Bytes 16) :

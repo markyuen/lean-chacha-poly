@@ -371,6 +371,120 @@ def chacha20SetGo (key : Key) (nonce : Nonce) (m : ByteArray) (ctr : UInt32)
   termination_by m.size - off
   decreasing_by omega
 
+/-! ## In-place fused pass (USize-indexed)
+
+The same in-place writer as the set-based pass, but indexing the message and
+output with `ByteArray.uget`/`uset` (raw `USize` indices → the static-inline
+`lean_byte_array_uget`/`uset` in the runtime) instead of `getElem`/`set`
+(boxed `Nat` indices). Sound only when every index fits a `USize`, i.e.
+`m.size < USize.size`; `chacha20` takes that as a one-per-call runtime guard
+and falls back to `chacha20Push` when it fails (never on a `ByteArray` that
+the runtime can allocate — its length is stored as a `size_t`).
+`chacha20SetGoU_eq` (bridge) proves this engine equals `chacha20SetGo` under
+the guard, so it inherits `chacha20_eq_spec`. -/
+
+/-- `(k : Nat).toUSize` round-trips through `toNat` when `k < USize.size`. -/
+theorem toNat_toUSize_of_lt {k : Nat} (h : k < USize.size) : k.toUSize.toNat = k :=
+  USize.toNat_ofNat_of_lt' h
+
+/-- `ByteArray.uget` reads the same byte as `getElem` at the index's `Nat` value. -/
+theorem uget_eq_getElem {a : ByteArray} {i : USize} {h : i.toNat < a.size} :
+    a.uget i h = a[i.toNat]'h := by
+  rcases a with ⟨bs⟩
+  show bs[i] = _
+  rw [Array.ugetElem_eq_getElem, ByteArray.getElem_eq_getElem_data]
+
+/-- `ByteArray.uset` writes the same as `set` at the index's `Nat` value. -/
+theorem uset_eq_set {a : ByteArray} {i : USize} {v : UInt8} {h : i.toNat < a.size} :
+    a.uset i v h = a.set i.toNat v h := by
+  rcases a with ⟨bs⟩
+  show (⟨bs.uset i v h⟩ : ByteArray) = (⟨bs.set i.toNat v h⟩ : ByteArray)
+  rw [Array.uset_eq_set]
+
+theorem size_uset (a : ByteArray) (i : USize) (v : UInt8) (h : i.toNat < a.size) :
+    (a.uset i v h).size = a.size := by
+  rw [uset_eq_set]; exact size_set a i.toNat v h
+
+/-- The `USize` index `iU + c` reads back as the `Nat` index `i + c`, given the
+    base relation `iU.toNat = i` and that `i + c` fits a `USize`. The index
+    arithmetic stays in `USize` (no per-access `Nat → USize` conversion). -/
+theorem uidx_eq {i c : Nat} {iU : USize} (hiU : iU.toNat = i) (hb : i + c < USize.size) :
+    (iU + USize.ofNat c).toNat = i + c := by
+  rw [USize.toNat_add, hiU, USize.toNat_ofNat_of_lt' (show c < USize.size by omega),
+    Nat.mod_eq_of_lt hb]
+
+/-- XOR-write 4 bytes in place via `uset` at the `USize` base `iU` (= `i`):
+    `out[i+k] := m[i+k] ^^^ (w >>> 8k)`. The four byte indices are `USize`
+    additions `iU + 0..3` — one `Nat → USize` conversion is amortized per block
+    by the caller, not paid per byte. -/
+@[inline] def setXor4U (n : Nat) (out : SizedBA n) (w : UInt32) (m : ByteArray)
+    (i : Nat) (iU : USize) (hiU : iU.toNat = i)
+    (hm : i + 4 ≤ m.size) (ho : i + 4 ≤ n) (hMN : m.size < USize.size) : SizedBA n :=
+  have hsz := out.property
+  ⟨((((out.val.uset (iU + USize.ofNat 0)
+        ((m.uget (iU + USize.ofNat 0) (by rw [uidx_eq hiU (by omega)]; omega)) ^^^ w.toUInt8)
+        (by rw [uidx_eq hiU (by omega)]; omega)).uset
+      (iU + USize.ofNat 1)
+        ((m.uget (iU + USize.ofNat 1) (by rw [uidx_eq hiU (by omega)]; omega)) ^^^ (w >>> 8).toUInt8)
+        (by rw [uidx_eq hiU (by omega)]; simp only [size_uset]; omega)).uset
+      (iU + USize.ofNat 2)
+        ((m.uget (iU + USize.ofNat 2) (by rw [uidx_eq hiU (by omega)]; omega)) ^^^ (w >>> 16).toUInt8)
+        (by rw [uidx_eq hiU (by omega)]; simp only [size_uset]; omega)).uset
+      (iU + USize.ofNat 3)
+        ((m.uget (iU + USize.ofNat 3) (by rw [uidx_eq hiU (by omega)]; omega)) ^^^ (w >>> 24).toUInt8)
+        (by rw [uidx_eq hiU (by omega)]; simp only [size_uset]; omega)),
+   by simp only [size_uset]; exact hsz⟩
+
+/-- XOR-write 64 bytes at `off` via `uset` (the `setBlockXor` analogue). The
+    `USize` base `offU` (= `off`) is computed once; each word's base is the
+    `USize` addition `offU + 4k`. -/
+def setBlockXorU (n : Nat) (out : SizedBA n) (s : St) (m : ByteArray) (off : Nat)
+    (hm : off + 64 ≤ m.size) (ho : off + 64 ≤ n) (hMN : m.size < USize.size) : SizedBA n :=
+  let offU := off.toUSize
+  have hoffU : offU.toNat = off := toNat_toUSize_of_lt (by omega)
+  let o1  := setXor4U n out s.x0  m off        offU                 hoffU                     (le_of_off64' hm) (le_of_off64' ho) hMN
+  let o2  := setXor4U n o1  s.x1  m (off + 4)  (offU + USize.ofNat 4)  (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o3  := setXor4U n o2  s.x2  m (off + 8)  (offU + USize.ofNat 8)  (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o4  := setXor4U n o3  s.x3  m (off + 12) (offU + USize.ofNat 12) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o5  := setXor4U n o4  s.x4  m (off + 16) (offU + USize.ofNat 16) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o6  := setXor4U n o5  s.x5  m (off + 20) (offU + USize.ofNat 20) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o7  := setXor4U n o6  s.x6  m (off + 24) (offU + USize.ofNat 24) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o8  := setXor4U n o7  s.x7  m (off + 28) (offU + USize.ofNat 28) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o9  := setXor4U n o8  s.x8  m (off + 32) (offU + USize.ofNat 32) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o10 := setXor4U n o9  s.x9  m (off + 36) (offU + USize.ofNat 36) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o11 := setXor4U n o10 s.x10 m (off + 40) (offU + USize.ofNat 40) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o12 := setXor4U n o11 s.x11 m (off + 44) (offU + USize.ofNat 44) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o13 := setXor4U n o12 s.x12 m (off + 48) (offU + USize.ofNat 48) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o14 := setXor4U n o13 s.x13 m (off + 52) (offU + USize.ofNat 52) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  let o15 := setXor4U n o14 s.x14 m (off + 56) (offU + USize.ofNat 56) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+  setXor4U n o15 s.x15 m (off + 60) (offU + USize.ofNat 60) (uidx_eq hoffU (by omega))  (le_of_off64 (by decide) hm) (le_of_off64 (by decide) ho) hMN
+
+/-- In-place tail XOR via `uset` (the `tailXorSet` analogue). -/
+def tailXorSetU (m : ByteArray) (off : Nat) (ks : ByteArray) (j : Nat)
+    (out : SizedBA m.size) (hMN : m.size < USize.size) : SizedBA m.size :=
+  if h : off + j < m.size ∧ j < ks.size then
+    tailXorSetU m off ks (j + 1)
+      ⟨out.val.uset (off + j).toUSize
+         ((m.uget (off + j).toUSize (by rw [toNat_toUSize_of_lt (by omega)]; exact h.1)) ^^^ (ks[j]'h.2))
+         (by rw [toNat_toUSize_of_lt (by omega)]; have := out.property; omega),
+       by rw [size_uset]; exact out.property⟩ hMN
+  else out
+  termination_by m.size - (off + j)
+  decreasing_by omega
+
+/-- The USize-indexed set-based fused loop (the `chacha20SetGo` analogue). -/
+def chacha20SetGoU (key : Key) (nonce : Nonce) (m : ByteArray) (ctr : UInt32)
+    (off : Nat) (out : SizedBA m.size) (hMN : m.size < USize.size) : ByteArray :=
+  if h : off + 64 ≤ m.size then
+    chacha20SetGoU key nonce m (ctr + 1) (off + 64)
+      (setBlockXorU m.size out (block key nonce ctr) m off h h hMN) hMN
+  else if off < m.size then
+    (tailXorSetU m off
+      (pushBlock (ByteArray.emptyWithCapacity 64) (block key nonce ctr)) 0 out hMN).val
+  else out.val
+  termination_by m.size - off
+  decreasing_by omega
+
 theorem size_copyAll (msg : ByteArray) :
     (msg.copySlice 0 (ByteArray.emptyWithCapacity msg.size) 0 msg.size).size
       = msg.size := by
@@ -378,12 +492,26 @@ theorem size_copyAll (msg : ByteArray) :
   simp [ByteArray.size_append, ByteArray.size_extract, size_emptyWithCapacity,
     ByteArray.size_data]
 
-/-- Encrypt or decrypt a message (fused single pass, in-place XOR writes into
-    a pre-sized copy of the message). -/
-def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
+/-- The retained `getElem`/`set` (boxed-`Nat`-indexed) fused pass — the previous
+    `chacha20` body, kept as a differential baseline. `chacha20_eq_setPass`
+    proves the guarded `chacha20` agrees with it. -/
+def chacha20Set (key : Key) (nonce : Nonce) (counter : UInt32)
     (msg : ByteArray) : ByteArray :=
   chacha20SetGo key nonce msg counter 0
     ⟨msg.copySlice 0 (ByteArray.emptyWithCapacity msg.size) 0 msg.size,
      size_copyAll msg⟩
+
+/-- Encrypt or decrypt a message (fused single pass, in-place XOR writes into
+    a pre-sized copy of the message). Indexes with `uget`/`uset` when the
+    message fits a `USize` (always, for any allocatable `ByteArray`), falling
+    back to the `getElem`/`set` push pass otherwise. -/
+def chacha20 (key : Key) (nonce : Nonce) (counter : UInt32)
+    (msg : ByteArray) : ByteArray :=
+  if hMN : msg.size < USize.size then
+    chacha20SetGoU key nonce msg counter 0
+      ⟨msg.copySlice 0 (ByteArray.emptyWithCapacity msg.size) 0 msg.size,
+       size_copyAll msg⟩ hMN
+  else
+    chacha20Push key nonce counter msg
 
 end ChaCha20.Fast

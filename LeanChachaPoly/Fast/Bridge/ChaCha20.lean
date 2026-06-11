@@ -737,17 +737,56 @@ theorem chacha20SetGo_toList (key : Key) (nonce : Nonce) (m : ByteArray)
       List.take_of_length_le hlen]
     simp [ChaCha20.Spec.xorBytes]
 
-/-! ## Capstone -/
+/-! ## USize engine equals the set engine
 
-/-- **Capstone.** The fast ChaCha20 equals the spec on every input:
-    encrypting a `ByteArray` and reading the bytes back gives exactly the
-    spec's output on the same bytes. -/
-theorem chacha20_eq_spec (key : Key) (nonce : Nonce) (ctr : UInt32)
-    (msg : ByteArray) :
-    (chacha20 key nonce ctr msg).data.toList
-      = ChaCha20.Spec.chacha20 key.toSpec nonce.toSpec ctr msg.data.toList := by
-  rw [chacha20, chacha20SetGo_toList, ChaCha20.Spec.chacha20]
-  simp
+The `uget`/`uset` (USize-indexed) engine equals the `getElem`/`set`
+(Nat-indexed) engine pointwise: `uget`/`uset` reduce to `getElem`/`set` at the
+index's `Nat` value (`uget_eq_getElem`, `uset_eq_set`), and the `USize`
+indices round-trip under the `m.size < USize.size` guard
+(`toNat_toUSize_of_lt`). So `chacha20SetGoU` inherits `chacha20SetGo_toList`
+and the capstone, with no new spec reasoning. -/
+
+theorem setXor4U_eq (n : Nat) (out : SizedBA n) (w : UInt32) (m : ByteArray)
+    (i : Nat) (iU : USize) (hiU : iU.toNat = i)
+    (hm : i + 4 ≤ m.size) (ho : i + 4 ≤ n) (hMN : m.size < USize.size) :
+    setXor4U n out w m i iU hiU hm ho hMN = setXor4 n out w m i hm ho := by
+  apply Subtype.ext
+  simp only [setXor4U, setXor4, uget_eq_getElem, uset_eq_set, Nat.add_zero,
+    uidx_eq hiU (show i + 0 < USize.size by omega),
+    uidx_eq hiU (show i + 1 < USize.size by omega),
+    uidx_eq hiU (show i + 2 < USize.size by omega),
+    uidx_eq hiU (show i + 3 < USize.size by omega)]
+
+theorem setBlockXorU_eq (n : Nat) (out : SizedBA n) (s : St) (m : ByteArray) (off : Nat)
+    (hm : off + 64 ≤ m.size) (ho : off + 64 ≤ n) (hMN : m.size < USize.size) :
+    setBlockXorU n out s m off hm ho hMN = setBlockXor n out s m off hm ho := by
+  simp only [setBlockXorU, setBlockXor, setXor4U_eq]
+
+theorem tailXorSetU_eq (m : ByteArray) (off : Nat) (ks : ByteArray) (j : Nat)
+    (out : SizedBA m.size) (hMN : m.size < USize.size) :
+    tailXorSetU m off ks j out hMN = tailXorSet m off ks j out := by
+  fun_induction tailXorSetU m off ks j out hMN with
+  | case1 j out h ih =>
+    rw [tailXorSet, dif_pos h, ih]
+    congr 1
+    apply Subtype.ext
+    simp only [uset_eq_set, uget_eq_getElem,
+      toNat_toUSize_of_lt (show off + j < USize.size by have := out.property; omega)]
+  | case2 j out h =>
+    rw [tailXorSet, dif_neg h]
+
+theorem chacha20SetGoU_eq (key : Key) (nonce : Nonce) (m : ByteArray) (ctr : UInt32)
+    (off : Nat) (out : SizedBA m.size) (hMN : m.size < USize.size) :
+    chacha20SetGoU key nonce m ctr off out hMN = chacha20SetGo key nonce m ctr off out := by
+  fun_induction chacha20SetGoU key nonce m ctr off out hMN with
+  | case1 ctr off out h ih =>
+    rw [chacha20SetGo, dif_pos h, ih, setBlockXorU_eq]
+  | case2 ctr off out h hlt =>
+    rw [chacha20SetGo, dif_neg h, if_pos hlt, tailXorSetU_eq]
+  | case3 ctr off out h hlt =>
+    rw [chacha20SetGo, dif_neg h, if_neg hlt]
+
+/-! ## Capstone -/
 
 /-- **Supporting.** The retained push-based pass also matches the spec
     (the previous capstone proof, verbatim). -/
@@ -757,6 +796,38 @@ theorem chacha20Push_toList (key : Key) (nonce : Nonce) (ctr : UInt32)
       = ChaCha20.Spec.chacha20 key.toSpec nonce.toSpec ctr msg.data.toList := by
   rw [chacha20Push, chacha20Go_toList, ChaCha20.Spec.chacha20]
   simp
+
+/-- **Capstone.** The fast ChaCha20 equals the spec on every input:
+    encrypting a `ByteArray` and reading the bytes back gives exactly the
+    spec's output on the same bytes. Splits on the `msg.size < USize.size`
+    guard: the `uget`/`uset` engine via `chacha20SetGoU_eq`, the fallback via
+    `chacha20Push_toList`. -/
+theorem chacha20_eq_spec (key : Key) (nonce : Nonce) (ctr : UInt32)
+    (msg : ByteArray) :
+    (chacha20 key nonce ctr msg).data.toList
+      = ChaCha20.Spec.chacha20 key.toSpec nonce.toSpec ctr msg.data.toList := by
+  rw [chacha20]
+  split
+  · rw [chacha20SetGoU_eq, chacha20SetGo_toList, ChaCha20.Spec.chacha20]
+    simp
+  · exact chacha20Push_toList key nonce ctr msg
+
+/-- **Supporting.** The retained `getElem`/`set` pass also matches the spec
+    (the previous capstone proof, verbatim). -/
+theorem chacha20Set_toList (key : Key) (nonce : Nonce) (ctr : UInt32)
+    (msg : ByteArray) :
+    (chacha20Set key nonce ctr msg).data.toList
+      = ChaCha20.Spec.chacha20 key.toSpec nonce.toSpec ctr msg.data.toList := by
+  rw [chacha20Set, chacha20SetGo_toList, ChaCha20.Spec.chacha20]
+  simp
+
+/-- **Engines agree.** The guarded `uget`/`uset` pass equals the retained
+    `getElem`/`set` pass. -/
+theorem chacha20_eq_setPass (key : Key) (nonce : Nonce) (ctr : UInt32)
+    (msg : ByteArray) :
+    chacha20 key nonce ctr msg = chacha20Set key nonce ctr msg := by
+  apply toList_inj
+  rw [chacha20_eq_spec, chacha20Set_toList]
 
 /-- **Engines agree.** The set-based pass equals the retained push-based pass. -/
 theorem chacha20_eq_pushPass (key : Key) (nonce : Nonce) (ctr : UInt32)

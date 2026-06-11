@@ -99,17 +99,42 @@ engines agree on every input (`accumulate_eq_accumulateNat`).
 The fast ChaCha20 is a fused single pass: each 64-byte block is computed with
 the 16 state words register-threaded through the round loop (`roundsGo` — the
 words are loop parameters, so the compiled loop keeps them in registers) and
-XOR-written in place into a pre-sized output with `ByteArray.set` — no
-intermediate keystream buffer, one allocation per block. The push-based pass
-(`chacha20Push`) and the two-pass composition (`xorBytes` + `keystream`, which
-the key derivation needs) are retained with corollaries that the engines agree
-on every input (`chacha20_eq_pushPass`, `chacha20_eq_twoPass`).
+XOR-written in place into a pre-sized output — no intermediate keystream
+buffer, one allocation per block. The bytes are indexed with `ByteArray.uget`/
+`uset` (raw `USize` indices → the static-inline `lean_byte_array_uget`/`uset`)
+rather than `getElem`/`set` (boxed `Nat` indices); `chacha20` takes a
+`msg.size < USize.size` guard (always true for any allocatable `ByteArray`,
+checked once per call) so the indices fit a `USize`, falling back to
+`chacha20Push` otherwise. The retained `getElem`/`set` pass (`chacha20Set`),
+the push-based pass (`chacha20Push`), and the two-pass composition (`xorBytes`
++ `keystream`, which the key derivation needs) are kept with corollaries that
+the engines agree on every input (`chacha20_eq_setPass`, `chacha20_eq_pushPass`,
+`chacha20_eq_twoPass`).
 
-Indicative local throughput (`lake exe bench`, Apple Silicon, 64 KiB messages):
-ChaCha20 ~475 MB/s fast (in-place set pass) vs ~340 MB/s for the retained
-push pass vs ~220 MB/s for the retained two-pass vs ~14 MB/s spec; Poly1305
-~1.1 GB/s fast (limb engine) vs ~17 MB/s for the retained Nat engine vs
-~3 MB/s spec; AEAD ~320 MB/s fast vs ~2 MB/s spec.
+Indicative local throughput — `lake exe bench`, mean of 7 runs on an Apple M2
+(8-core, 16 GB, macOS 26.5.1, Lean v4.29.1), 64 KiB messages:
+
+```
+  name                       MB/s
+  chacha20 fast (USize)       530      ← chacha20, the AEAD's ChaCha20 pass
+  chacha20 fast set           476        retained getElem/set engine
+  chacha20 fast push          341        retained push engine
+  chacha20 fast 2pass         222        retained two-pass (keystream ⊕ msg)
+  chacha20 spec                13
+  poly1305 fast (limb)       1110      ← poly1305, the AEAD's MAC pass
+  poly1305 fast nat            17        retained GMP-Nat engine
+  poly1305 spec                 2
+  aead encrypt fast           343
+  aead decrypt fast           345
+  aead encrypt spec             2
+```
+
+The USize pass is ~11% faster than the retained set pass on full blocks (530 vs
+476 MB/s at 64 KiB, 524 vs 470 at 1 KiB); on a single 64-byte block the two are
+even within run-to-run noise (358 vs 369), since the once-per-call guard and
+once-per-block `USize` base setup are not amortized over one block. Magnitudes
+are machine-specific; `lake exe bench` prints the full table (all sizes,
+ns/op).
 
 The **ChaCha20** fast pass was driven by reading the **emitted C**
 (`.lake/build/ir/**.c`) rather than by intuition — the first theory about its
@@ -214,11 +239,13 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 
 ## Future work
 
-- Speed up the fast ChaCha20 further (still the AEAD bottleneck at ~475 MB/s
-  vs the limb Poly1305's ~1.1 GB/s): the remaining measured scalar win is
-  `USize` indexing (~+12%, prototyped), which needs a `msg.size < USize.size`
-  guard branch and substantial bridge glue; SIMD is outside Lean's current
-  reach.
+- Speed up the fast ChaCha20 further. The `USize`-indexing win (~11% on full
+  blocks, now implemented behind the `msg.size < USize.size` guard) leaves the
+  ChaCha20 pass at ~530 MB/s, still the AEAD bottleneck vs the limb Poly1305's
+  ~1.1 GB/s. The next scalar candidate (threading the `USize` block base
+  through `chacha20SetGoU` instead of reconverting `off.toUSize` per block, and
+  a small-message path for the single-block case) is unmeasured; SIMD is
+  outside Lean's current reach.
 - Upstream the generic bridge lemmas (the `ByteArray ↔ List` kit,
   `bitConstrained_card`, `zipWith_take_right`) to Batteries/Mathlib to shrink the
   project-local surface — candidates and locations in

@@ -90,6 +90,16 @@ def main : IO Unit := do
   let sizes : List (Nat × Nat × Nat) :=  -- (bytes, fast iters, spec iters)
     [(64, 100000, 2000), (1024, 20000, 200), (64 * 1024, 500, 5), (1024 * 1024, 32, 0)]
 
+  -- Differential check: the guarded uget/uset `chacha20` must agree with the
+  -- retained `chacha20Push` at block-boundary lengths (proved by
+  -- `chacha20_eq_pushPass`; checked here at runtime before timing).
+  for len in [0, 1, 63, 64, 65, 127, 128, 4096, 64 * 1024] do
+    let m := randBA (UInt64.ofNat (300 + len)) len
+    let a := ChaCha20.Fast.chacha20 key nonce 7 m
+    let b := ChaCha20.Fast.chacha20Push key nonce 7 m
+    if a != b then
+      IO.eprintln s!"DIFFERENTIAL MISMATCH at len={len}"
+
   IO.println "=== lean-chacha-poly benchmarks ==="
   IO.println s!"  {pad "name" 22} {padL "size" 8} {padL "iters" 8} {padL "ns/op" 12} {padL "MB/s" 8}"
   let mut sink : UInt64 := 0
@@ -99,6 +109,8 @@ def main : IO Unit := do
     let m := randBA (UInt64.ofNat (100 + bytes)) bytes
     sink := sink + (← row "chacha20 fast" bytes fIters
       (fun i => (ChaCha20.Fast.chacha20 key nonce (UInt32.ofNat i) m).get! 0))
+    sink := sink + (← row "chacha20 fast set" bytes fIters
+      (fun i => (ChaCha20.Fast.chacha20Set key nonce (UInt32.ofNat i) m).get! 0))
     sink := sink + (← row "chacha20 fast push" bytes fIters
       (fun i => (ChaCha20.Fast.chacha20Push key nonce (UInt32.ofNat i) m).get! 0))
     sink := sink + (← row "chacha20 fast 2pass" bytes fIters

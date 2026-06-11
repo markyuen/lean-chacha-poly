@@ -1,9 +1,9 @@
 # Optimizing Lean 4 runtime performance: an emitted-C-driven workflow
 
 Notes from optimizing this repo's verified fast implementation (Phases B–D in
-[plan.md](plan.md)). The workflow took the AEAD from ~15 MB/s to ~320 MB/s
-across three optimization phases while keeping every equivalence capstone's
-name, statement, and axiom set unchanged. The methodology should transfer to
+[plan.md](plan.md)). The workflow took the AEAD from ~15 MB/s to ~344 MB/s
+across three optimization phases and a follow-up `USize`-indexing pass, while
+keeping every equivalence capstone's name, statement, and axiom set unchanged. The methodology should transfer to
 any Lean 4 project with a hot path.
 
 **A note on novelty**: the components are standard — inspecting generated code
@@ -145,11 +145,20 @@ same kind of thing:
   special instructions. One genuine caveat: x86-64 has 16 general-purpose
   registers vs arm64's 31, so the 16-words-in-registers loop will spill
   somewhat there; expect a smaller but still positive win.
-- The remaining gap to scalar C (~1–2 GB/s vs our ~475 MB/s) is more
-  Lean-runtime overhead (boxed `Nat` indices — a measured +12% is available
-  from `USize` indexing, deferred because it needs a `msg.size < USize.size`
-  guard branch and ~150–250 proof lines — plus refcount traffic), not
-  algorithm.
+- The remaining gap to scalar C (~1–2 GB/s vs our ~530 MB/s) is more
+  Lean-runtime overhead (refcount traffic and per-call dispatch), not
+  algorithm. The boxed-`Nat`-index overhead has been removed: `USize` indexing
+  (`uget`/`uset`) behind a `msg.size < USize.size` guard measured +11% on full
+  blocks (476 → 530 MB/s at 64 KiB, 7-run mean), at ~70 lines of bridge glue —
+  the `uget`/`uset` operations reduce to the `getElem`/`set` engine pointwise
+  (`Array.uset_eq_set`/`ugetElem_eq_getElem`), so the USize engine equals the
+  set engine under the guard and inherits the capstone with no new spec
+  reasoning. Indexing must stay in `USize` to win: a first cut that converted
+  `(i+k).toUSize` per access measured ~0% (it only trades `fget`'s unbox for an
+  added `usize_of_nat`); threading a once-per-block `USize` base is what landed
+  the +11%. On a single 64-byte block the USize and set passes are even within
+  run-to-run noise (the guard and base
+  setup are not amortized over one block).
 
 ## Robustness to future compiler versions
 
@@ -205,7 +214,7 @@ third and fourth slots only — but its contribution to the third is real:
 - It strengthens the artifact's **credibility on its performance claim**. An
   earlier audit of this repo deleted a "Native" layer whose equivalence
   theorems were vacuous wrappers; the verified fast implementation is the
-  response, and it has to be non-toy to count. AEAD at ~320 MB/s is in
+  response, and it has to be non-toy to count. AEAD at ~344 MB/s is in
   "actually deployable on a single core" territory, and each superseded
   engine retained with an engines-agree theorem is evidence the bridge
   methodology survives optimization pressure: three substantial rewrites of
@@ -213,6 +222,11 @@ third and fourth slots only — but its contribution to the third is real:
 - It recorded a **negative result** (the allocation theory, and the 1.13x
   sub-gate measurement for register-threading alone) that is arguably worth
   more to future maintainers than the 1.58x itself.
-- It is the right place to **stop**: the next measured win (`USize`, +12%)
-  costs ~200 proof lines and a runtime guard — the wrong trade for an
-  artifact whose value is the proofs, not the throughput.
+- The `USize`-indexing win (+12%) was first estimated at ~200 proof lines and
+  deferred on that basis. The estimate was wrong: because `uget`/`uset` reduce
+  to the `getElem`/`set` engine pointwise, the USize engine is provably equal
+  to the set engine under the guard rather than re-derived against the spec, so
+  it cost ~70 lines and inherits the capstone unchanged. It was then
+  implemented (ChaCha20 476 → 530 MB/s at 64 KiB). The lesson is about the
+  estimate, not the stopping rule: gate proof effort on a measurement, but
+  re-estimate the effort when a reduction to existing lemmas is available.

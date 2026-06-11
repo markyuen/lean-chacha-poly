@@ -321,12 +321,36 @@ since Stage 1 — are gone, closing the longest-standing future-work item:
 Every theorem in the library now closes over `{propext, Classical.choice,
 Quot.sound}` — nothing else — and the axiom guard enforces exactly that.
 
+## USize-indexed ChaCha20 pass (2026-06-11)
+
+The fast ChaCha20 now indexes with `ByteArray.uget`/`uset` (raw `USize`
+indices) instead of `getElem`/`set` (boxed `Nat` indices): +11% on full blocks
+(476 → 530 MB/s at 64 KiB, 7-run mean on an Apple M2; AEAD ~320 → ~344 MB/s),
+behind a once-per-call `msg.size < USize.size` guard with `chacha20Push` as the
+proven fallback.
+
+- **Bridge by engine equality, not re-derivation**: `uget`/`uset` reduce to
+  `getElem`/`set` at the index's `Nat` value (`uget_eq_getElem`,
+  `uset_eq_set`), so `chacha20SetGoU_eq` proves the USize engine equals the
+  retained set engine pointwise under the guard — ~70 lines instead of the
+  ~200 first estimated, and `chacha20_eq_spec` keeps its name, statement, and
+  axiom set.
+- **Index arithmetic stays in `USize`**: a first cut converting
+  `(i+k).toUSize` per access measured ~0%; the win came from one
+  `Nat → USize` conversion per block (`uidx_eq` carries the round-trip proof).
+- The previous engine is retained as `chacha20Set` with
+  `chacha20_eq_setPass`; the bench gains a runtime differential check of the
+  guarded pass against `chacha20Push` at boundary lengths.
+
 ## Future work
 
-- **Faster ChaCha20.** Still the AEAD bottleneck (~475 MB/s vs limb Poly1305's
-  ~1.1 GB/s): the remaining measured scalar win is `USize` indexing (~+12%,
-  prototyped — needs a `msg.size < USize.size` guard branch with `chacha20Push`
-  as the proven fallback, and ~150–250 lines of bridge glue); SIMD is outside
-  Lean's current reach.
+- **Faster ChaCha20.** `USize` indexing (`uget`/`uset` behind a
+  `msg.size < USize.size` guard, `chacha20Push` as the proven fallback) is
+  implemented: +11% on full blocks (476 → 530 MB/s at 64 KiB), ~70 lines of
+  bridge glue since the USize engine reduces to the `getElem`/`set` engine
+  pointwise. ChaCha20 (~530 MB/s) is still the AEAD bottleneck vs limb
+  Poly1305's ~1.1 GB/s. Open: thread the `USize` block base through
+  `chacha20SetGoU` and add a small-message path (the single-64-byte-block case
+  is even-to-slightly-slower); SIMD is outside Lean's current reach.
 - **Upstream the generic lemmas** to Batteries/Mathlib per
   [upstream-candidates.md](upstream-candidates.md).

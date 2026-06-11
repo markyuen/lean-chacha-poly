@@ -723,8 +723,8 @@ noncomputable def tagNat (r : ZMod P) (M : List UInt8) : Nat :=
   ((msgPoly (blockNats (toBlocks M))).eval r).val
 
 /-- The "observed tag `t` on `M`" event on a key `(r, s)`: the Poly1305 tag value is
-    `t`. By `poly1305_value`, `(tagNat (extractR key) M + extractS key) % 2¹²⁸ =
-    leToNat16 (poly1305 key M)`, so this is exactly `poly1305 key M = t`. -/
+    `t`. For an actual key this is exactly `poly1305 key M = t`
+    (`observed_iff_poly1305`). -/
 def observed (M : List UInt8) (t : Bytes 16) (rs : ZMod P × Nat) : Prop :=
   (tagNat rs.1 M + rs.2) % 2 ^ 128 = leToNat16 t
 
@@ -773,6 +773,17 @@ theorem observed_card (M : List UInt8) (t : Bytes 16) :
       omega
     exact Prod.ext rfl hpad
   · intro r _; rfl
+
+/-- **Supporting.** The value-level `observed` event is exactly the tag-byte event
+    `poly1305 key M = t`: a key with multiplier `r = extractR key` and pad
+    `s = extractS key` satisfies `observed M t (r, s)` iff Poly1305 tags `M` as `t`.
+    `poly1305_value` reads the tag back as its value and `leToNat16_inj` closes the
+    serialization round-trip, so the conditional bound is literally about tag bytes. -/
+theorem observed_iff_poly1305 (key : Key) (M : List UInt8) (t : Bytes 16) :
+    observed M t (((extractR key : Nat) : ZMod P), extractS key) ↔ poly1305 key M = t := by
+  unfold observed
+  rw [tagNat, ← accumulate_eq_eval_val, ← poly1305_value]
+  exact ⟨fun h => leToNat16_inj h, fun h => by rw [h]⟩
 
 open scoped Classical in
 set_option maxRecDepth 4000 in

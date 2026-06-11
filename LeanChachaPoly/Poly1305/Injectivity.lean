@@ -148,6 +148,15 @@ private theorem leToNat16_eq_leVal (bs : List UInt8) (h : bs.length = 16) :
     Fin.sum_univ_eq_sum_range (fun j => (bs.getD j default).toNat * 256 ^ j) 16, ← h]
   exact rangeSum_eq_leVal bs
 
+/-- **Key lemma.** `leToNat16` is injective on 16-byte values: equal little-endian
+    deserializations force equal byte lists. So reading a tag back as a number loses
+    nothing — the value determines the bytes. -/
+theorem leToNat16_inj {a b : Bytes 16} (h : leToNat16 a = leToNat16 b) : a = b := by
+  obtain ⟨a, ha⟩ := a
+  obtain ⟨b, hb⟩ := b
+  rw [leToNat16_eq_leVal a ha, leToNat16_eq_leVal b hb] at h
+  exact Subtype.ext (leVal_inj a b (by rw [ha, hb]) h)
+
 /-- **Key lemma.** Full 16-byte blocks inject (the `2¹²⁸` high bit is constant, so the content
     determines the bytes). -/
 theorem blockToNat_inj (a b : List UInt8) (ha : a.length = 16) (hb : b.length = 16)

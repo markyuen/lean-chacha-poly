@@ -8,8 +8,12 @@ It verifies three complementary layers:
 1. **Functional correctness** — the spec computes the right bytes (it matches the RFC
    test vectors) and `decrypt ∘ encrypt = id`.
 2. **Information-theoretic security** — Poly1305 is an almost-universal hash, so a
-   forger's success probability is bounded by `8⌈L/16⌉ / 2¹⁰⁶`. The bound is
-   quantified over every possible attacker and involves no computational hardness
+   forger's success probability is bounded by `8⌈L/16⌉ / 2¹⁰⁶`. The bound holds
+   against every deterministic forger as a theorem, not a prose argument: a forger
+   is a function `A` from the observed tag to a forged `(message, tag)`, and
+   `poly1305_adversary_forgery_prob` bounds the fraction of consistent clamped keys
+   it forges; `poly1305_adversary_forgery_multi_prob` adds the `v`-attempt union
+   bound `v · 8⌈L/16⌉ / 2¹⁰⁶`. The bound involves no computational hardness
    assumption; its one mathematical hypothesis is the primality of `2¹³⁰ − 5`, a
    well-known fact taken as `[Fact (Nat.Prime P)]` rather than yet proved here
    (see *What is NOT covered*).
@@ -40,6 +44,7 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 |---|---|---|
 | `poly1305_tag_forgery_prob` | `Poly1305/Security` | **The headline.** The published Poly1305 forgery probability, stated directly about `poly1305` and its 16-byte tags: with `r` uniform over the `2¹⁰⁶` clamped keys, turning an observed tag on `M` into a tag on `M' ≠ M` succeeds with probability at most **`8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`**, with `⌈L/16⌉` written as `(L+15)/16`. The proof derives the cancellation of the one-time pad `s` from the two tag equations. |
 | `poly1305_tag_forgery` | `Poly1305/Security` | The counting form: at most `8⌈L/16⌉` clamped keys admit any pad `s` producing the observed/forged tag pair. |
+| `poly1305_adversary_forgery_prob` (+ `_multi_prob`) | `Poly1305/Security` | The adversary-as-function form: for any forger `A : tag → (message, tag)` with `(A t).1 ≠ M`, the fraction of clamped keys consistent with the observed tag under which `A` forges is at most the headline `ε`; `_multi` unions `v` attempts into `v · 8⌈L/16⌉ / 2¹⁰⁶`. Quantifies the bound over every deterministic attacker. |
 | `poly1305_byte_forgery` | `Poly1305/Security` | The byte-level engine: a forger targeting a fixed accumulator offset mod `2¹²⁸` succeeds for at most `8 · max #blocks` keys; the factor `8` counts the integer candidates per offset. |
 | `clampImage_card` / `clamp_fiber_card` | `Poly1305/Spec/Clamp` | The clamped key space has exactly `2¹⁰⁶` elements (the ε denominator), and every clamped value has exactly `2²²` preimages — so the uniform distribution on clamped keys is the one that drawing 16 uniform bytes and clamping produces. |
 | `poly1305_almost_universal` | `Poly1305/Security` | Almost-universal hashing over the field `ZMod P`: two distinct block-lists collide for at most `max #blocks` keys `r` (root-counting on a nonzero difference polynomial). |

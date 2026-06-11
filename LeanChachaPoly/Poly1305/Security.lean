@@ -686,4 +686,108 @@ theorem poly1305_tag_forgery_prob [Fact (Nat.Prime P)] (M M' : List UInt8)
   gcongr
   exact_mod_cast poly1305_tag_forgery M M' hne t t'
 
+/-! ## Adversary-as-function formulation
+
+    `poly1305_tag_forgery` fixes the forged pair `(M', t')`. A deterministic
+    forger is a function of what it observes: given the genuine tag `t` on the
+    known message `M`, it outputs a candidate `(M', t') = A t`. Quantifying over
+    every such function `A` turns "quantified over every possible attacker" into a
+    theorem rather than a prose argument — the key count is unchanged, since `A t`
+    is determined once `t` is fixed. `poly1305_adversary_forgery_multi` adds the
+    `v`-attempt union bound. -/
+
+open scoped Classical in
+/-- **Capstone.** Forgery bound against an arbitrary deterministic forger `A`. For
+    any function mapping an observed tag to a forged `(message, tag)` with
+    `(A t).1 ≠ M`, the clamped keys consistent with the observed tag `t` on `M`
+    under which `A` also forges number at most `8 · max ⌈|M|/16⌉ ⌈|(A t).1|/16⌉`.
+    Reduces to `poly1305_tag_forgery` at `M' := (A t).1`, `t' := (A t).2`. -/
+theorem poly1305_adversary_forgery [Fact (Nat.Prime P)]
+    (M : List UInt8) (t : Bytes 16)
+    (A : Bytes 16 → List UInt8 × Bytes 16) (hne : (A t).1 ≠ M) :
+    (clampedKeys.filter (fun r : ZMod P =>
+      ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key (A t).1 = (A t).2)).card
+      ≤ 8 * max ((M.length + 15) / 16) (((A t).1.length + 15) / 16) :=
+  poly1305_tag_forgery M (A t).1 (Ne.symm hne) t (A t).2
+
+open scoped Classical in
+/-- **Capstone.** The adversary forgery probability: against any deterministic
+    forger `A`, the fraction of clamped keys (uniform over the `2¹⁰⁶` values)
+    consistent with the observed tag under which `A` forges is at most
+    `8 · max ⌈|M|/16⌉ ⌈|(A t).1|/16⌉ / 2¹⁰⁶`. -/
+theorem poly1305_adversary_forgery_prob [Fact (Nat.Prime P)]
+    (M : List UInt8) (t : Bytes 16)
+    (A : Bytes 16 → List UInt8 × Bytes 16) (hne : (A t).1 ≠ M) :
+    ((clampedKeys.filter (fun r : ZMod P =>
+      ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key (A t).1 = (A t).2)).card : ℝ)
+      / clampedKeys.card
+      ≤ ((8 * max ((M.length + 15) / 16) (((A t).1.length + 15) / 16) : ℕ) : ℝ) / 2 ^ 106 :=
+  poly1305_tag_forgery_prob M (A t).1 (Ne.symm hne) t (A t).2
+
+open scoped Classical in
+/-- **Capstone.** The `v`-attempt union bound. A forger that produces `v` candidate
+    forgeries `A 0, …, A (v-1)` succeeds for at most `v` times the single-shot
+    bound: if every candidate message has length `≤ L` and differs from `M`, the
+    clamped keys under which *some* attempt forges number at most `v · 8⌈L/16⌉`. -/
+theorem poly1305_adversary_forgery_multi [Fact (Nat.Prime P)]
+    (M : List UInt8) (t : Bytes 16) (v : ℕ)
+    (A : Fin v → List UInt8 × Bytes 16) (hne : ∀ i, (A i).1 ≠ M)
+    (L : ℕ) (hL : M.length ≤ L) (hLi : ∀ i, (A i).1.length ≤ L) :
+    (clampedKeys.filter (fun r : ZMod P =>
+      ∃ i : Fin v, ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key (A i).1 = (A i).2)).card
+      ≤ v * (8 * ((L + 15) / 16)) := by
+  classical
+  -- the ∃ i filter is the union of the per-attempt filters
+  have hunion : (clampedKeys.filter (fun r : ZMod P =>
+      ∃ i : Fin v, ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key (A i).1 = (A i).2))
+      = (Finset.univ : Finset (Fin v)).biUnion (fun i =>
+          clampedKeys.filter (fun r : ZMod P =>
+            ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+              poly1305 key M = t ∧ poly1305 key (A i).1 = (A i).2)) := by
+    ext r
+    simp only [Finset.mem_filter, Finset.mem_biUnion, Finset.mem_univ, true_and]
+    constructor
+    · rintro ⟨hr, i, h⟩; exact ⟨i, hr, h⟩
+    · rintro ⟨i, hr, h⟩; exact ⟨hr, i, h⟩
+  rw [hunion]
+  calc ((Finset.univ : Finset (Fin v)).biUnion (fun i =>
+          clampedKeys.filter (fun r : ZMod P =>
+            ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+              poly1305 key M = t ∧ poly1305 key (A i).1 = (A i).2))).card
+      ≤ ∑ i : Fin v, (clampedKeys.filter (fun r : ZMod P =>
+          ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+            poly1305 key M = t ∧ poly1305 key (A i).1 = (A i).2)).card :=
+        Finset.card_biUnion_le
+    _ ≤ ∑ _i : Fin v, 8 * ((L + 15) / 16) := by
+        apply Finset.sum_le_sum
+        intro i _
+        have hLi' := hLi i
+        have hbound := poly1305_tag_forgery M (A i).1 (Ne.symm (hne i)) t (A i).2
+        have hm : max ((M.length + 15) / 16) (((A i).1.length + 15) / 16) ≤ (L + 15) / 16 :=
+          max_le (Nat.div_le_div_right (by omega)) (Nat.div_le_div_right (by omega))
+        exact hbound.trans (Nat.mul_le_mul (Nat.le_refl 8) hm)
+    _ = v * (8 * ((L + 15) / 16)) := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, smul_eq_mul]
+
+open scoped Classical in
+/-- **Capstone.** The `v`-attempt forgery probability: against a forger making `v`
+    attempts (every candidate of length `≤ L`, distinct from `M`), the fraction of
+    clamped keys under which some attempt forges is at most `v · 8⌈L/16⌉ / 2¹⁰⁶`. -/
+theorem poly1305_adversary_forgery_multi_prob [Fact (Nat.Prime P)]
+    (M : List UInt8) (t : Bytes 16) (v : ℕ)
+    (A : Fin v → List UInt8 × Bytes 16) (hne : ∀ i, (A i).1 ≠ M)
+    (L : ℕ) (hL : M.length ≤ L) (hLi : ∀ i, (A i).1.length ≤ L) :
+    ((clampedKeys.filter (fun r : ZMod P =>
+      ∃ i : Fin v, ∃ key : Key, ((extractR key : Nat) : ZMod P) = r ∧
+        poly1305 key M = t ∧ poly1305 key (A i).1 = (A i).2)).card : ℝ)
+      / clampedKeys.card
+      ≤ ((v * (8 * ((L + 15) / 16)) : ℕ) : ℝ) / 2 ^ 106 := by
+  rw [clampedKeys_card, Nat.cast_pow, Nat.cast_ofNat]
+  gcongr
+  exact_mod_cast poly1305_adversary_forgery_multi M t v A hne L hL hLi
+
 end Poly1305.Spec

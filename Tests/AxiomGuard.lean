@@ -60,6 +60,20 @@ info: 'ChaCha20.Spec.quarterRound_bijective' depends on axioms: [propext,
 /-- info: 'Poly1305.Spec.poly1305_tag_forgery_prob' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Poly1305.Spec.poly1305_tag_forgery_prob
 
+/-- info: 'Poly1305.Spec.poly1305_adversary_forgery' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Poly1305.Spec.poly1305_adversary_forgery
+
+/-- info: 'Poly1305.Spec.poly1305_adversary_forgery_prob' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Poly1305.Spec.poly1305_adversary_forgery_prob
+
+/-- info: 'Poly1305.Spec.poly1305_adversary_forgery_multi' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Poly1305.Spec.poly1305_adversary_forgery_multi
+
+/--
+info: 'Poly1305.Spec.poly1305_adversary_forgery_multi_prob' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Poly1305.Spec.poly1305_adversary_forgery_multi_prob
+
 /-! ## AEAD -/
 
 /-- info: 'Aead.Spec.decrypt_encrypt' depends on axioms: [propext, Classical.choice, Quot.sound] -/

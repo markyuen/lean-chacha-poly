@@ -30,7 +30,7 @@ exception (the `bv_decide` SAT-certificate axiom behind the quarter-round biject
 ```
 lake exe cache get      # fetch the matching Mathlib build
 lake build              # check every proof  (0 sorry)
-lake exe test           # run the RFC 8439 vectors + property checks (spec AND fast)
+lake exe test           # RFC 8439 + Wycheproof vectors + property checks (spec AND fast)
 lake exe bench          # local throughput benchmarks, fast vs spec
 ```
 
@@ -51,7 +51,7 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 | `toBlocks_inj` (→ `poly1305_almost_universal_msg'`) | `Poly1305/Injectivity` (→ `Security`) | The `2^(8·len)` padding makes the message→block encoding injective, lifting the bound from block-lists to **distinct messages**. |
 | `accumulate_eq_poly` | `Poly1305/Spec/Accumulate` | The iterative MAC loop **is** polynomial evaluation in `GF(2¹³⁰−5)` — the bridge the whole security argument rests on. |
 | `poly1305_value` | `Poly1305/Spec/Tag` | The 16-byte tag reads back as exactly `(accumulate + s) mod 2¹²⁸` (serialization is faithful, not lossy) — the link between the forgery bound and the tag bytes themselves. |
-| `prime_P` | `Poly1305/Spec/Primality` | `2¹³⁰ − 5` is prime, by an axiom-free Lucas/Pratt certificate (kernel `decide` over a fuel-based `powMod` — no `native_decide`). Supplies `Fact (Nat.Prime P)`, so the `ZMod P`-field security bounds are unconditionally instantiable. |
+| `prime_P` | `Poly1305/Spec/Primality` | `2¹³⁰ − 5` is prime, by an axiom-free Lucas/Pratt certificate (kernel `decide` over a fuel-based `powMod` — no `native_decide`; factor tree and witnesses in [docs/primality-certificate.md](docs/primality-certificate.md)). Supplies `Fact (Nat.Prime P)`, so the `ZMod P`-field security bounds are unconditionally instantiable. |
 
 ### ChaCha20 — correctness & structure
 
@@ -148,9 +148,9 @@ LeanChachaPoly/
     Spec/{QuarterRound, Keystream, Seek, Permutation, Xor}.lean
   Poly1305/
     Spec.lean                definitions + basic properties
-    Security.lean            security tower → tag-level forgery prob     ← capstone
+    Security.lean            security tower → adversary forgery bounds   ← capstone
     Injectivity.lean         block-encoding injectivity → toBlocks_inj   ← capstone
-    Spec/{Sum, Blocking, Accumulate, Tag, Clamp}.lean
+    Spec/{Sum, Blocking, Accumulate, Tag, Clamp, Primality}.lean
   Aead/
     Spec.lean                construction (encrypt / decrypt)
     Correctness.lean         decrypt_encrypt (the roundtrip)             ← capstone
@@ -162,7 +162,7 @@ LeanChachaPoly/
     Poly1305.lean            5×26-bit UInt64 limb engine (+ Nat-engine baseline)
     Aead.lean                fast AEAD composition
     Bridge/{ByteList, ChaCha20, Poly1305, Poly1305Limb, Aead}.lean  fast = spec  ← capstones
-Tests/                       RFC 8439 vectors (spec + fast) + differential + axiom guard
+Tests/                       RFC 8439 + Wycheproof vectors (spec + fast) + differential + axiom guard
 Bench/                       lake exe bench — fast vs spec throughput
 ```
 
@@ -182,16 +182,6 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   bound (`aead_forgery_prob`) isolates this assumption as its model hypothesis: it
   quantifies over a uniform one-time poly key, which is exactly what the PRF assumption
   would supply for `derivePolyKey`.
-
-- **Primality of `P = 2¹³⁰ − 5`** *(discharged).* The field-level forgery bounds need
-  `ZMod P` to be a field, i.e. `P` prime. This 40-digit primality is proved by an
-  axiom-free Lucas/Pratt certificate (`prime_P`, `Poly1305/Spec/Primality.lean`), whose
-  `instance : Fact (Nat.Prime P)` the security theorems resolve directly — they carry no
-  primality hypothesis and are unconditional statements. The certificate's modular
-  exponentiations are evaluated by the *kernel*
-  through a fuel-based `powMod` and plain `decide`, so it adds no axiom (`#print axioms
-  prime_P` is `[propext, Classical.choice, Quot.sound]`) — see
-  [docs/primality-certificate.md](docs/primality-certificate.md).
 
 - **One trusted axiom.** `quarterRound_bijective` (and its two round-trips) are proved
   by `bv_decide`. The SAT solver itself is *untrusted* — it must produce an LRAT

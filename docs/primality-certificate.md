@@ -3,7 +3,8 @@
 The field-level Poly1305 bounds need `ZMod P` to be a field, i.e. `P = 2¹³⁰ − 5`
 prime. `LeanChachaPoly/Poly1305/Spec/Primality.lean` discharges this as
 `Poly1305.Spec.prime_P : Nat.Prime P` and provides `instance : Fact (Nat.Prime P)`,
-so every `[Fact (Nat.Prime P)]` security theorem is unconditionally instantiable.
+which the security theorems resolve directly — they carry no primality hypothesis
+and are unconditional.
 
 ## Axiom-free, via kernel `decide` on a fuel-based `powMod`
 

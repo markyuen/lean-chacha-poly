@@ -1,7 +1,7 @@
 # Development history — the path taken
 
 This is a retrospective of how `lean-chacha-poly` reached its current state. For *what*
-is proved and *how to use it*, see [`README.md`](README.md). The project is complete:
+is proved and *how to use it*, see [`README.md`](../README.md). The project is complete:
 `lake build` is `sorry`-free, the RFC 8439 vectors pass, and the capstones are
 axiom-clean (modulo one documented `bv_decide` axiom).
 
@@ -111,9 +111,14 @@ Addressed in full:
 LeanChachaPoly/
   Subtypes.lean
   ChaCha20/   Spec · Correctness             + Spec/{QuarterRound,Keystream,Seek,Permutation,Xor}
-  Poly1305/   Spec · Security · Injectivity  + Spec/{Sum,Blocking,Accumulate,Tag,Clamp}
+  Poly1305/   Spec · Security · Injectivity  + Spec/{Sum,Blocking,Accumulate,Tag,Clamp,Primality}
   Aead/       Spec · Correctness · Security  + Spec/{KeyDerivation,MacData}
-Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · PropertiesTest · AxiomGuard · Helpers
+  Fast/       Types · ChaCha20 · Poly1305 · Aead
+              + Bridge/{ByteList,ChaCha20,Poly1305,Poly1305Limb,Aead}
+Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · PropertiesTest
+              · FastTest · WycheproofTest · AxiomGuard · Helpers
+Bench/        lake exe bench
+docs/         this file · optimizing-lean-runtime · primality-certificate · upstream-candidates
 ```
 
 ## Verification
@@ -123,7 +128,9 @@ Tests/        ChaCha20Test · Poly1305Test · ChaCha20Poly1305Test · Properties
   `{propext, Classical.choice, Quot.sound}`, plus the pre-existing
   `quarterRound …bv_decide.ax` pair (the lone non-foundational axiom). The build fails
   if any set grows.
-- `lake exe test` — all RFC 8439 vector groups + property checks pass.
+- `lake exe test` — RFC 8439 vector groups (spec and fast), the 316 Wycheproof
+  96-bit-nonce cases (spec and fast), differential fast-vs-spec checks, and the
+  property checks all pass.
 - CI (`.github/workflows/ci.yml`) runs all of the above on every push.
 
 ## Phase: verified fast implementation (2026-06)
@@ -258,15 +265,42 @@ verifying the optimized shapes landed, and the measure-before-prove gate
 discipline) is documented in
 [optimizing-lean-runtime.md](optimizing-lean-runtime.md).
 
+## Hardening round (2026-06-11)
+
+A second external audit pass drove five changes:
+
+- **Adversary-quantified bounds** (`poly1305_adversary_forgery(_prob)`,
+  `_multi(_prob)`): the forger is an arbitrary function from the observed tag to a
+  forged `(message, tag)`; the `v`-attempt union bound gives `v · 8⌈L/16⌉ / 2¹⁰⁶`.
+  "Quantified over every attacker" became a theorem rather than a prose argument.
+- **Primality discharged, axiom-free** (`Poly1305/Spec/Primality.lean`): a
+  Lucas/Pratt certificate over the 25-prime factor tree of `P − 1`, with the
+  modular exponentiations kernel-evaluated through a fuel-based binary `powMod`
+  and plain `decide` — no `native_decide`. The original plan assumed kernel
+  reduction was infeasible and budgeted for an `ofReduceBool` trade-off; the
+  audit disproved that with a 10-line prototype, and the axiom-free version is
+  what landed. Every security theorem then dropped its `[Fact (Nat.Prime P)]`
+  hypothesis — the bounds are unconditional and instantiable.
+- **Wycheproof vectors** (`Tests/WycheproofTest.lean`): all 316 96-bit-nonce
+  cases of C2SP `chacha20_poly1305_test.json` (256 valid, 60 invalid), verified
+  byte-identical against upstream during the audit, run through both the spec
+  and the fast implementation.
+- **Constant-time-shaped tag comparison**: `Fast.decrypt` compares tags with a
+  whole-array `ctEq` (no first-mismatch branch) bridged by `ctEq_toList_beq`
+  under an unchanged capstone; the spec keeps `==` for readability with
+  `decryptCT` / `decryptCT_eq_decrypt` as the proved-equal variant.
+- **Upstream candidates recorded** (`docs/upstream-candidates.md`): the generic
+  `ByteArray ↔ List` kit, `bitConstrained_card`, `zipWith_take_right`.
+
 ## Future work
 
 - **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from
   `rotl32_inv` / `rotl32_xor` / `xor_self_cancel`) instead of `bv_decide`, making the
   whole library uniformly foundational.
-- **Unconditional security.** Discharge `Nat.Prime (2¹³⁰ − 5)` via a Pratt certificate,
-  removing the `[Fact (Nat.Prime P)]` hypothesis.
 - **Faster ChaCha20.** Still the AEAD bottleneck (~475 MB/s vs limb Poly1305's
   ~1.1 GB/s): the remaining measured scalar win is `USize` indexing (~+12%,
   prototyped — needs a `msg.size < USize.size` guard branch with `chacha20Push`
   as the proven fallback, and ~150–250 lines of bridge glue); SIMD is outside
   Lean's current reach.
+- **Upstream the generic lemmas** to Batteries/Mathlib per
+  [upstream-candidates.md](upstream-candidates.md).

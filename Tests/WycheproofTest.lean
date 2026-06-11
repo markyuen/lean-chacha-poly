@@ -1,5 +1,6 @@
 import Tests.Helpers
 import LeanChachaPoly.Aead.Spec
+import LeanChachaPoly.Fast.Aead
 
 /-!
 # Wycheproof ChaCha20-Poly1305 test vectors
@@ -368,12 +369,34 @@ def runOne (tv : WTV) : IO Bool := do
   else
     checkBool s!"tc{tv.tcId} {tv.comment} (rejected)" (dec == none)
 
+/-- Same vector through the fast `ByteArray` AEAD. `decrypt_eq_spec` guarantees
+    the same verdict; running it exercises the compiled code paths the proofs
+    do not execute. -/
+def runOneFast (tv : WTV) : IO Bool := do
+  let key   := Fast.BytesA.ofSpec (mkKey tv.key)
+  let nonce := Fast.BytesA.ofSpec (mkNonce tv.iv)
+  let aad   := (hexToList tv.aad).toByteArray
+  let msg   := hexToList tv.msg
+  let ctt   := (hexToList tv.ct ++ hexToList tv.tag)
+  let dec   := Aead.Fast.decrypt key nonce ctt.toByteArray aad
+  if tv.valid then
+    checkBool s!"tc{tv.tcId} {tv.comment}"
+      (dec.map (·.data.toList) == some msg
+        && (Aead.Fast.encrypt key nonce msg.toByteArray aad).data.toList == ctt)
+  else
+    checkBool s!"tc{tv.tcId} {tv.comment} (rejected)" (dec == none)
+
 def runTests : IO Unit := do
   IO.println "Wycheproof ChaCha20-Poly1305 (ivSize=96)"
-  group "wycheproof" do
+  group "wycheproof (spec)" do
     let mut results := #[]
     for tv in vectors do
       results := results.push (← runOne tv)
+    return results.toList
+  group "wycheproof (fast)" do
+    let mut results := #[]
+    for tv in vectors do
+      results := results.push (← runOneFast tv)
     return results.toList
   IO.println ""
 

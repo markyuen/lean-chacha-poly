@@ -2,6 +2,7 @@ import LeanChachaPoly.ChaCha20.Spec
 import LeanChachaPoly.ChaCha20.Spec.Xor
 import LeanChachaPoly.ChaCha20.Spec.Keystream
 import LeanChachaPoly.Poly1305.Spec
+import Std.Tactic.BVDecide
 
 /-!
 # ChaCha20-Poly1305 AEAD — Specification
@@ -78,6 +79,62 @@ def macData (aad ciphertext : List UInt8) : Padded :=
     simp only [List.length_append]
     omega⟩
 
+/-! ## Constant-time-shaped tag comparison -/
+
+/-- XOR of two bytes is zero exactly on equal bytes. -/
+private theorem UInt8.xor_eq_zero (x y : UInt8) : x ^^^ y = 0 ↔ x = y := by bv_decide
+
+/-- OR of two bytes is zero exactly when both are zero. -/
+private theorem UInt8.or_eq_zero (x y : UInt8) : x ||| y = 0 ↔ x = 0 ∧ y = 0 := by bv_decide
+
+/-- OR-accumulating a byte list onto `acc` is zero exactly when `acc` and every
+    element are zero. -/
+private theorem foldl_or_eq_zero : ∀ (l : List UInt8) (acc : UInt8),
+    l.foldl (· ||| ·) acc = 0 ↔ acc = 0 ∧ ∀ x ∈ l, x = 0
+  | [], acc => by simp
+  | h :: t, acc => by
+    rw [List.foldl_cons, foldl_or_eq_zero t, UInt8.or_eq_zero, List.forall_mem_cons]
+    exact and_assoc
+
+/-- Tag comparison that inspects every byte: equal lengths and a zero
+    OR-accumulation of the per-byte XOR differences. No branch depends on which
+    byte first differs, in place of the short-circuiting `==`. `ctEq_iff` proves
+    it equals `=`, so substituting it leaves `decrypt` semantically unchanged. -/
+def ctEq (a b : List UInt8) : Bool :=
+  (a.length == b.length) && ((List.zipWith (· ^^^ ·) a b).foldl (· ||| ·) 0 == 0)
+
+/-- **Key lemma.** `ctEq` decides list equality: `true` exactly when the byte lists
+    are equal. The whole-tag scan returns the same verdict as `==`. -/
+theorem ctEq_iff (a b : List UInt8) : ctEq a b = true ↔ a = b := by
+  rw [ctEq, Bool.and_eq_true, beq_iff_eq, beq_iff_eq, foldl_or_eq_zero]
+  constructor
+  · rintro ⟨hlen, -, hz⟩
+    apply List.ext_getElem hlen
+    intro i h1 h2
+    have hmem : (List.zipWith (· ^^^ ·) a b)[i]'(by rw [List.length_zipWith]; omega)
+        ∈ List.zipWith (· ^^^ ·) a b := List.getElem_mem _
+    rw [List.getElem_zipWith] at hmem
+    exact (UInt8.xor_eq_zero _ _).mp (hz _ hmem)
+  · rintro rfl
+    refine ⟨rfl, rfl, fun x hx => ?_⟩
+    rw [List.mem_iff_getElem] at hx
+    obtain ⟨i, _, rfl⟩ := hx
+    rw [List.getElem_zipWith]
+    exact (UInt8.xor_eq_zero _ _).mpr rfl
+
+/-- `ctEq a a` is `true`. -/
+@[simp] theorem ctEq_self (a : List UInt8) : ctEq a a = true := (ctEq_iff a a).mpr rfl
+
+/-- `ctEq` agrees with `==`; the fast bridge rewrites the `ByteArray` comparison
+    along this once both sides are reduced to lists. -/
+theorem beq_eq_ctEq (a b : List UInt8) : (a == b) = ctEq a b := by
+  by_cases h : a = b
+  · subst h; simp
+  · rw [beq_eq_false_iff_ne.mpr h]
+    symm
+    simp only [Bool.eq_false_iff, ne_eq, ctEq_iff]
+    exact h
+
 /-! ## Encrypt and decrypt -/
 
 /-- AEAD encryption: returns ciphertext ‖ 16-byte tag. -/
@@ -94,7 +151,9 @@ def encrypt (key : Key) (nonce : Nonce)
     **Timing caveat.** `recvTag == expTag.val` is a short-circuiting list
     comparison — the classic MAC timing leak if executed as-is. The functional
     spec only fixes input→output behavior; a production implementation must
-    compare tags in constant time. -/
+    compare tags in constant time. `decryptCT` below is the same function with the
+    short-circuit removed (`decryptCT_eq_decrypt`), and `ctEq_iff` certifies the
+    replacement comparison still decides equality. -/
 def decrypt (key : Key) (nonce : Nonce)
     (ciphertextAndTag aad : List UInt8) : Option (List UInt8) :=
   if ciphertextAndTag.length < 16 then none
@@ -107,6 +166,32 @@ def decrypt (key : Key) (nonce : Nonce)
     if recvTag == expTag.val then
       some (chacha20 key nonce 1 ciphertext)
     else none
+
+/-- Constant-time-shaped decryption: identical to `decrypt` except the tag check
+    uses `ctEq` (a whole-tag scan) in place of the short-circuiting `==`. The
+    `decryptCT_eq_decrypt` theorem proves the two compute the same function, so
+    every property proved of `decrypt` transfers; this variant only removes the
+    first-mismatch branch at the source level. A runtime constant-time guarantee
+    additionally requires the compiled comparison primitive to be branch-free,
+    which is a property of the artifact, not of this spec. -/
+def decryptCT (key : Key) (nonce : Nonce)
+    (ciphertextAndTag aad : List UInt8) : Option (List UInt8) :=
+  if ciphertextAndTag.length < 16 then none
+  else
+    let ctLen      := ciphertextAndTag.length - 16
+    let ciphertext := ciphertextAndTag.take ctLen
+    let recvTag    := ciphertextAndTag.drop ctLen
+    let polyKey    := derivePolyKey key nonce
+    let expTag     := poly1305 polyKey (macData aad ciphertext).val
+    if ctEq recvTag expTag.val then
+      some (chacha20 key nonce 1 ciphertext)
+    else none
+
+/-- **Key lemma.** The constant-time variant computes the same function as
+    `decrypt`: the only difference is `==` versus `ctEq`, equal by `beq_eq_ctEq`. -/
+theorem decryptCT_eq_decrypt : decryptCT = decrypt := by
+  funext key nonce ciphertextAndTag aad
+  simp only [decryptCT, decrypt, beq_eq_ctEq]
 
 /-!
 This file is construction only. The properties live elsewhere:

@@ -2,7 +2,6 @@ import LeanChachaPoly.ChaCha20.Spec
 import LeanChachaPoly.ChaCha20.Spec.Xor
 import LeanChachaPoly.ChaCha20.Spec.Keystream
 import LeanChachaPoly.Poly1305.Spec
-import Std.Tactic.BVDecide
 
 /-!
 # ChaCha20-Poly1305 AEAD — Specification
@@ -83,10 +82,14 @@ def macData (aad ciphertext : List UInt8) : Padded :=
 /-! ## Constant-time-shaped tag comparison -/
 
 /-- XOR of two bytes is zero exactly on equal bytes. -/
-private theorem UInt8.xor_eq_zero (x y : UInt8) : x ^^^ y = 0 ↔ x = y := by bv_decide
+private theorem UInt8.xor_eq_zero (x y : UInt8) : x ^^^ y = 0 ↔ x = y := by
+  rw [← UInt8.toBitVec_inj, ← UInt8.toBitVec_inj, UInt8.toBitVec_xor,
+    UInt8.toBitVec_zero, BitVec.xor_eq_zero_iff]
 
 /-- OR of two bytes is zero exactly when both are zero. -/
-private theorem UInt8.or_eq_zero (x y : UInt8) : x ||| y = 0 ↔ x = 0 ∧ y = 0 := by bv_decide
+private theorem UInt8.or_eq_zero (x y : UInt8) : x ||| y = 0 ↔ x = 0 ∧ y = 0 := by
+  rw [← UInt8.toBitVec_inj, ← UInt8.toBitVec_inj, ← UInt8.toBitVec_inj, UInt8.toBitVec_or,
+    UInt8.toBitVec_zero, BitVec.or_eq_zero_iff]
 
 /-- OR-accumulating a byte list onto `acc` is zero exactly when `acc` and every
     element are zero. -/

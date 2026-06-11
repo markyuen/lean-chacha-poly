@@ -23,9 +23,8 @@ It verifies three complementary layers:
    so the RFC vectors, the roundtrip theorem, and the forgery bounds all transfer
    to the code you would actually run.
 
-Everything is `sorry`-free and rests on Lean/Mathlib's three foundational axioms
-(`propext`, `Classical.choice`, `Quot.sound`) — with a single, explicitly documented
-exception (the `bv_decide` SAT-certificate axiom behind the quarter-round bijection).
+Everything is `sorry`-free and every capstone rests on Lean/Mathlib's three foundational
+axioms (`propext`, `Classical.choice`, `Quot.sound`), enforced theorem-by-theorem in `Tests/AxiomGuard.lean`.
 
 ```
 lake exe cache get      # fetch the matching Mathlib build
@@ -79,7 +78,7 @@ and proved as a one-line corollary in one file — see
 
 | Theorem | File | Statement |
 |---|---|---|
-| `chacha20_eq_spec` | `Fast/Bridge/ChaCha20` | The `ByteArray` ChaCha20 produces exactly the spec's bytes on every input. The round bridge never reasons about ARX semantics: the fast rounds apply the spec's `quarterRound` terms verbatim, so each position is a definitional "stuck match" identity — no `bv_decide`. |
+| `chacha20_eq_spec` | `Fast/Bridge/ChaCha20` | The `ByteArray` ChaCha20 produces exactly the spec's bytes on every input. The round bridge never reasons about ARX semantics: the fast rounds apply the spec's `quarterRound` terms verbatim, so each position is a definitional "stuck match" identity. |
 | `poly1305_eq_spec` | `Fast/Bridge/Poly1305` | The `ByteArray` Poly1305 produces exactly the spec's 16-byte tag on every input (the accumulation *is* `Spec.step`; the bridge is entirely about byte loads and blocking). |
 | `encrypt_eq_spec` / `decrypt_eq_spec` | `Fast/Bridge/Aead` | The fast AEAD equals the spec — including rejecting exactly the same forgeries — so the security capstones apply verbatim to the fast code. |
 | `decrypt_encrypt` (fast) | `Fast/Bridge/Aead` | The fast-side roundtrip, inherited from the spec capstone through the bridges. |
@@ -192,16 +191,6 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   quantifies over a uniform one-time poly key, which is exactly what the PRF assumption
   would supply for `derivePolyKey`.
 
-- **One trusted axiom.** `quarterRound_bijective` (and its two round-trips) are proved
-  by `bv_decide`. The SAT solver itself is *untrusted* — it must produce an LRAT
-  certificate, which a checker *formally verified in Lean* validates. The trust enters
-  at one point: that checker is run as natively compiled code rather than by the kernel
-  (infeasible at this size), so the Lean compiler/runtime joins the trusted base for
-  exactly that one Boolean evaluation — recorded as a per-theorem axiom of the form
-  `…bv_decide.ax` ("the verified checker returned `true` on this certificate"), pinned
-  by the axiom guard. An algebraic reproof (from the rotate/XOR invertibility lemmas
-  already present) would remove even that — see future work.
-
 - **Constant-time / side-channel resistance.** The proofs are about input→output values;
   they say nothing about timing, caches, or power. The fast implementation — the code
   that actually runs — compares tags with a whole-tag `ctEq` (equal sizes and a zero
@@ -225,9 +214,6 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 
 ## Future work
 
-- Reprove `quarterRoundInv_quarterRound` / `quarterRound_quarterRoundInv` algebraically
-  (via `rotl32_inv` / `rotl32_xor` / `xor_self_cancel`) to make the whole library
-  uniformly foundational — no `bv_decide` axiom.
 - Speed up the fast ChaCha20 further (still the AEAD bottleneck at ~475 MB/s
   vs the limb Poly1305's ~1.1 GB/s): the remaining measured scalar win is
   `USize` indexing (~+12%, prototyped), which needs a `msg.size < USize.size`

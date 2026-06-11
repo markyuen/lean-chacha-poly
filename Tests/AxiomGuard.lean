@@ -5,16 +5,11 @@ import LeanChachaPoly
 
 Compile-time enforcement that the capstones' axiom sets never silently grow:
 each `#guard_msgs` below **fails the build** if `#print axioms` reports anything
-other than the recorded set. Everything closes over Lean's three foundational
-axioms (`propext`, `Classical.choice`, `Quot.sound`), with one documented
-exception: `quarterRound_bijective` carries two `bv_decide` axioms, each stating
-that the Lean-verified LRAT checker accepted one SAT certificate (the solver is
-untrusted; the checker run is natively compiled rather than kernel-reduced, so
-the compiler is trusted for exactly those two Boolean evaluations).
+other than the recorded set. Every capstone closes over Lean's three foundational
+axioms (`propext`, `Classical.choice`, `Quot.sound`) and nothing else.
 
-If a legitimate change alters an axiom set (e.g. removing the `bv_decide`
-dependency), update the corresponding doc-comment here so the change appears
-in review.
+If a legitimate change alters an axiom set, update the corresponding doc-comment
+here so the change appears in review.
 -/
 
 /-! ## ChaCha20 -/
@@ -22,13 +17,7 @@ in review.
 /-- info: 'ChaCha20.Spec.chacha20_involutive' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms ChaCha20.Spec.chacha20_involutive
 
-/--
-info: 'ChaCha20.Spec.quarterRound_bijective' depends on axioms: [propext,
- Classical.choice,
- Quot.sound,
- ChaCha20.Spec.quarterRoundInv_quarterRound._native.bv_decide.ax_1_10,
- ChaCha20.Spec.quarterRound_quarterRoundInv._native.bv_decide.ax_1_10]
--/
+/-- info: 'ChaCha20.Spec.quarterRound_bijective' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms ChaCha20.Spec.quarterRound_bijective
 
 /-! ## Poly1305 -/
@@ -104,9 +93,7 @@ info: 'Poly1305.Spec.poly1305_adversary_forgery_multi_prob' depends on axioms: [
 
 /-! ## Fast implementation bridges
 
-The fast `ByteArray` implementation equals the spec on every input. These
-bridges use no `bv_decide` certificates and no native evaluation — only the
-three foundational axioms. -/
+The fast `ByteArray` implementation equals the spec on every input. -/
 
 /-- info: 'ChaCha20.Fast.chacha20_eq_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms ChaCha20.Fast.chacha20_eq_spec

@@ -2,15 +2,16 @@
 
 This is a retrospective of how `lean-chacha-poly` reached its current state. For *what*
 is proved and *how to use it*, see [`README.md`](../README.md). The project is complete:
-`lake build` is `sorry`-free, the RFC 8439 vectors pass, and the capstones are
-axiom-clean (modulo one documented `bv_decide` axiom).
+`lake build` is `sorry`-free, the RFC 8439 vectors pass, and every capstone is
+axiom-clean (`{propext, Classical.choice, Quot.sound}`).
 
 > **Correction to the original scope.** The first design notes described this as an
 > "axiom-free, Mathlib-free" project with security "out of scope." That turned out to be
 > too pessimistic: the Poly1305 *information-theoretic* security results **are** provable
-> in Lean and now form the centerpiece (using Mathlib's `Polynomial`/`ZMod`). The only
-> non-foundational axiom is the `bv_decide` SAT-certificate behind the quarter-round
-> bijection.
+> in Lean and now form the centerpiece (using Mathlib's `Polynomial`/`ZMod`). The
+> quarter-round bijection was at first the one non-foundational dependency (a `bv_decide`
+> SAT certificate); it is now reproved algebraically, so every capstone closes over the
+> three foundational axioms alone.
 
 ## Stage 1 — Functional correctness
 
@@ -125,8 +126,7 @@ docs/         this file · optimizing-lean-runtime · primality-certificate · u
 
 - `lake build` — 0 `sorry`.
 - `Tests/AxiomGuard.lean` — `#guard_msgs`-enforced `#print axioms` on every capstone:
-  `{propext, Classical.choice, Quot.sound}`, plus the pre-existing
-  `quarterRound …bv_decide.ax` pair (the lone non-foundational axiom). The build fails
+  `{propext, Classical.choice, Quot.sound}` and nothing else. The build fails
   if any set grows.
 - `lake exe test` — RFC 8439 vector groups (spec and fast), the 316 Wycheproof
   96-bit-nonce cases (spec and fast), differential fast-vs-spec checks, and the
@@ -142,7 +142,7 @@ into the executables), proved equal to the spec on every input:
   `Spec.quarterRound` verbatim (inlined), keystream pushed into a
   capacity-reserved `ByteArray`. Bridge `chacha20_eq_spec`: the round bridge is a
   "stuck match" identity per quarter-round position (`Fast/Bridge/ChaCha20.lean`) —
-  no bit-vector reasoning, no `bv_decide`.
+  no bit-vector reasoning.
 - **Poly1305 (Phase A)** — message stays a `ByteArray`; 16-byte blocks loaded as two
   `UInt64` words combined into a `Nat`; the accumulation reuses `Spec.step` (GMP
   arithmetic) definitionally. Bridge `poly1305_eq_spec` via a little-endian valuation
@@ -305,11 +305,24 @@ A follow-up review pass added two refinements:
   as a one-line corollary of the result it names — a referee's reading list that
   breaks the build if a capstone's statement drifts (complementing `AxiomGuard`).
 
+## The last axiom dropped (2026-06-11)
+
+The `bv_decide` SAT certificates — the library's one non-foundational dependency
+since Stage 1 — are gone, closing the longest-standing future-work item:
+
+- **Quarter-round bijection, algebraically**: `rotl32` is proved equal to
+  `BitVec.rotateLeft` by bit-index reasoning (`rotl32_toBitVec`, via
+  `getLsbD_rotateLeft`), giving `rotl32_inv` and `rotl32_xor` without SAT; the
+  round-trips then telescope through the four specialized rotation complements,
+  `xor_self_cancel`, and add/sub cancellation (`Spec/Permutation.lean`).
+- **AEAD byte lemmas**: `ctEq`'s `UInt8` XOR/OR-zero facts reproved by rewriting
+  through `BitVec.xor_eq_zero_iff` / `or_eq_zero_iff`.
+
+Every theorem in the library now closes over `{propext, Classical.choice,
+Quot.sound}` — nothing else — and the axiom guard enforces exactly that.
+
 ## Future work
 
-- **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from
-  `rotl32_inv` / `rotl32_xor` / `xor_self_cancel`) instead of `bv_decide`, making the
-  whole library uniformly foundational.
 - **Faster ChaCha20.** Still the AEAD bottleneck (~475 MB/s vs limb Poly1305's
   ~1.1 GB/s): the remaining measured scalar win is `USize` indexing (~+12%,
   prototyped — needs a `msg.size < USize.size` guard branch with `chacha20Push`

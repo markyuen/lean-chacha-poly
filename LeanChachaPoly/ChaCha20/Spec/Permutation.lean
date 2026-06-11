@@ -1,5 +1,5 @@
 import LeanChachaPoly.ChaCha20.Spec
-import Std.Tactic.BVDecide
+import LeanChachaPoly.ChaCha20.Spec.QuarterRound
 import Mathlib.Logic.Function.Basic
 
 /-!
@@ -33,21 +33,38 @@ def quarterRoundInv : UInt32 × UInt32 × UInt32 × UInt32 → UInt32 × UInt32 
     let a0 := a1 - b0
     (a0, b0, c0, d0)
 
-/-- **Key lemma.** `quarterRoundInv` undoes `quarterRound'`. (Discharged by
-    `bv_decide`, which adds a trusted native SAT-certificate axiom — the library's
-    only non-foundational dependency.) -/
+/-! Each step of the round telescopes through one of three cancellations: a
+    rotation undone by its complement (`rotl32_inv`, specialized to the four
+    ChaCha amounts below), an XOR undone by repeating its operand
+    (`xor_self_cancel`), and a modular add/subtract pair. -/
+
+private theorem rinv7  (X : UInt32) : rotl32 (rotl32 X 7)  25 = X := rotl32_inv 7  X (by decide)
+private theorem rinv8  (X : UInt32) : rotl32 (rotl32 X 8)  24 = X := rotl32_inv 8  X (by decide)
+private theorem rinv12 (X : UInt32) : rotl32 (rotl32 X 12) 20 = X := rotl32_inv 12 X (by decide)
+private theorem rinv16 (X : UInt32) : rotl32 (rotl32 X 16) 16 = X := rotl32_inv 16 X (by decide)
+private theorem rinv20 (X : UInt32) : rotl32 (rotl32 X 20) 12 = X := rotl32_inv 20 X (by decide)
+private theorem rinv24 (X : UInt32) : rotl32 (rotl32 X 24) 8  = X := rotl32_inv 24 X (by decide)
+private theorem rinv25 (X : UInt32) : rotl32 (rotl32 X 25) 7  = X := rotl32_inv 25 X (by decide)
+
+private theorem add_sub_self (a b : UInt32) : a + b - b = a := by
+  apply UInt32.toBitVec_inj.1; simp
+
+private theorem sub_add_self (a b : UInt32) : a - b + b = a := by
+  apply UInt32.toBitVec_inj.1; simp
+
+/-- **Key lemma.** `quarterRoundInv` undoes `quarterRound'`. -/
 theorem quarterRoundInv_quarterRound (p : UInt32 × UInt32 × UInt32 × UInt32) :
     quarterRoundInv (quarterRound' p) = p := by
   obtain ⟨a, b, c, d⟩ := p
-  simp only [quarterRound', quarterRound, quarterRoundInv, rotl32, Prod.mk.injEq]
-  bv_decide
+  simp only [quarterRound', quarterRound, quarterRoundInv, rinv7, rinv8, rinv12, rinv16,
+    xor_self_cancel, add_sub_self]
 
-/-- **Key lemma.** `quarterRound'` undoes `quarterRoundInv` (see the axiom note above). -/
+/-- **Key lemma.** `quarterRound'` undoes `quarterRoundInv`. -/
 theorem quarterRound_quarterRoundInv (p : UInt32 × UInt32 × UInt32 × UInt32) :
     quarterRound' (quarterRoundInv p) = p := by
   obtain ⟨a, b, c, d⟩ := p
-  simp only [quarterRound', quarterRound, quarterRoundInv, rotl32, Prod.mk.injEq]
-  bv_decide
+  simp only [quarterRound', quarterRound, quarterRoundInv, rinv25, rinv24, rinv20, rinv16,
+    xor_self_cancel, sub_add_self]
 
 /-- **Capstone.** The quarter round is a bijection of `UInt32⁴`, with explicit
     inverse `quarterRoundInv` — the structural reason ChaCha20 is permutation-based. -/

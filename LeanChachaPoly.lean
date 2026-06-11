@@ -29,3 +29,4 @@ import LeanChachaPoly.Fast.Bridge.ChaCha20
 import LeanChachaPoly.Fast.Bridge.Poly1305
 import LeanChachaPoly.Fast.Bridge.Aead
 import LeanChachaPoly.Fast.Bridge.Poly1305Limb
+import LeanChachaPoly.Statements

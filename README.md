@@ -38,11 +38,16 @@ Lean toolchain `v4.29.1`, Mathlib pinned to match.
 
 ## Capstone results
 
+For a referee's reading list — every headline below restated in plain vocabulary
+and proved as a one-line corollary in one file — see
+[`LeanChachaPoly/Statements.lean`](LeanChachaPoly/Statements.lean).
+
 ### Poly1305 — security (the headline)
 
 | Theorem | File | Statement |
 |---|---|---|
 | `poly1305_tag_forgery_prob` | `Poly1305/Security` | **The headline.** The published Poly1305 forgery probability, stated directly about `poly1305` and its 16-byte tags: with `r` uniform over the `2¹⁰⁶` clamped keys, turning an observed tag on `M` into a tag on `M' ≠ M` succeeds with probability at most **`8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`**, with `⌈L/16⌉` written as `(L+15)/16`. The proof derives the cancellation of the one-time pad `s` from the two tag equations. |
+| `poly1305_tag_forgery_cond_prob` | `Poly1305/Security` | **The conditional form** (Bernstein's textbook statement): over the one-time key `(r, s)`, an attacker who *observes* the genuine tag `t` on `M` forges a tag on `M' ≠ M` with conditional probability at most the same `ε`. The one-time pad makes the observed tag independent of `r` (`observed_card`: the denominator is `2¹⁰⁶` for every `t`), so conditioning does not help. |
 | `poly1305_tag_forgery` | `Poly1305/Security` | The counting form: at most `8⌈L/16⌉` clamped keys admit any pad `s` producing the observed/forged tag pair. |
 | `poly1305_adversary_forgery_prob` (+ `_multi_prob`) | `Poly1305/Security` | The adversary-as-function form: for any forger `A : tag → (message, tag)` with `(A t).1 ≠ M`, the fraction of clamped keys consistent with the observed tag under which `A` forges is at most the headline `ε`; `_multi` unions `v` attempts into `v · 8⌈L/16⌉ / 2¹⁰⁶`. Quantifies the bound over every deterministic attacker. |
 | `poly1305_byte_forgery` | `Poly1305/Security` | The byte-level engine: a forger targeting a fixed accumulator offset mod `2¹²⁸` succeeds for at most `8 · max #blocks` keys; the factor `8` counts the integer candidates per offset. |

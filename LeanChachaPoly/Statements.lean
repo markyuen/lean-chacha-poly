@@ -72,18 +72,39 @@ theorem aead_binds_aad_and_ciphertext
     Forgery probabilities, over the one-time key modelled as `(r, s)` — multiplier
     `r` uniform over the `2¹⁰⁶` clamped field values, pad `s ∈ [0, 2¹²⁸)`. -/
 
+open scoped Classical in
 /-- **Poly1305 forgery probability (conditional).** Having observed the genuine tag
     `t` on `M`, a forger turns it into a tag `t'` on a different message `M' ≠ M`
     with probability at most `8·max ⌈|M|/16⌉ ⌈|M'|/16⌉ / 2¹⁰⁶`. The one-time pad makes
     the observation independent of the multiplier `r`, so conditioning does not help.
-    (The key is modelled as `(r, s)` over `keySpace`; see `poly1305_tag_forgery_cond_prob`.) -/
-alias poly1305_forgery_probability := Poly1305.Spec.poly1305_tag_forgery_cond_prob
+    The key is modelled as `(r, s)` over `keySpace`; `observed` is exactly the
+    Poly1305 tag event (`observed_iff_poly1305`). -/
+theorem poly1305_forgery_probability (M M' : List UInt8) (hne : M ≠ M')
+    (t t' : Bytes 16) :
+    ((Poly1305.Spec.keySpace.filter
+        (fun rs => Poly1305.Spec.observed M t rs ∧ Poly1305.Spec.observed M' t' rs)).card : ℝ)
+      / (Poly1305.Spec.keySpace.filter (Poly1305.Spec.observed M t)).card
+      ≤ ((8 * max ((M.length + 15) / 16) ((M'.length + 15) / 16) : ℕ) : ℝ) / 2 ^ 106 :=
+  Poly1305.Spec.poly1305_tag_forgery_cond_prob M M' hne t t'
 
+open scoped Classical in
 /-- **AEAD forgery probability.** With the one-time poly key uniform over the
     clamped values (the ChaCha20-PRF idealization — the one computational
     assumption), modifying `(aad, ciphertext)` yields an accepted forgery with
     probability at most `8·max ⌈L/16⌉ ⌈L'/16⌉ / 2¹⁰⁶` over the `macData` lengths. -/
-alias aead_forgery_probability := Aead.Spec.aead_forgery_prob
+theorem aead_forgery_probability (aad ct aad' ct' : List UInt8)
+    (ha : aad.length < 2 ^ 64) (hc : ct.length < 2 ^ 64)
+    (ha' : aad'.length < 2 ^ 64) (hc' : ct'.length < 2 ^ 64)
+    (hne : (aad, ct) ≠ (aad', ct')) (t t' : Bytes 16) :
+    ((Poly1305.Spec.clampedKeys.filter (fun r : ZMod Poly1305.Spec.P =>
+        ∃ pkey : Poly1305.Spec.Key,
+          ((Poly1305.Spec.extractR pkey : Nat) : ZMod Poly1305.Spec.P) = r ∧
+          Poly1305.Spec.poly1305 pkey (Aead.Spec.macData aad ct).val = t ∧
+          Poly1305.Spec.poly1305 pkey (Aead.Spec.macData aad' ct').val = t')).card : ℝ)
+      / Poly1305.Spec.clampedKeys.card
+      ≤ ((8 * max (((Aead.Spec.macData aad ct).val.length + 15) / 16)
+                  (((Aead.Spec.macData aad' ct').val.length + 15) / 16) : ℕ) : ℝ) / 2 ^ 106 :=
+  Aead.Spec.aead_forgery_prob aad ct aad' ct' ha hc ha' hc' hne t t'
 
 /-- **The Poly1305 prime is prime.** `2¹³⁰ − 5` is prime (axiom-free Lucas/Pratt
     certificate), so the field-level bounds above are unconditional. -/
@@ -95,13 +116,35 @@ theorem poly1305_modulus_is_prime : Nat.Prime Poly1305.Spec.P :=
     The `ByteArray` implementation that actually runs produces exactly the spec's
     bytes on every input, so every result above transfers to it. -/
 
-/-- ChaCha20: fast equals spec. -/
-alias fast_chacha20_eq_spec := ChaCha20.Fast.chacha20_eq_spec
-/-- Poly1305: fast equals spec. -/
-alias fast_poly1305_eq_spec := Poly1305.Fast.poly1305_eq_spec
-/-- AEAD encryption: fast equals spec. -/
-alias fast_encrypt_eq_spec := Aead.Fast.encrypt_eq_spec
-/-- AEAD decryption: fast equals spec (rejects exactly the same forgeries). -/
-alias fast_decrypt_eq_spec := Aead.Fast.decrypt_eq_spec
+/-- **ChaCha20: fast equals spec.** The `ByteArray` ChaCha20 produces exactly the
+    spec's bytes on every input. -/
+theorem fast_chacha20_eq_spec (key : ChaCha20.Fast.Key) (nonce : ChaCha20.Fast.Nonce)
+    (counter : UInt32) (message : ByteArray) :
+    (ChaCha20.Fast.chacha20 key nonce counter message).data.toList
+      = ChaCha20.Spec.chacha20 key.toSpec nonce.toSpec counter message.data.toList :=
+  ChaCha20.Fast.chacha20_eq_spec key nonce counter message
+
+/-- **Poly1305: fast equals spec.** The `ByteArray` Poly1305 produces exactly the
+    spec's 16-byte tag on every input. -/
+theorem fast_poly1305_eq_spec (key : Poly1305.Fast.Key) (message : ByteArray) :
+    (Poly1305.Fast.poly1305 key message).data.toList
+      = (Poly1305.Spec.poly1305 key.toSpec message.data.toList).val :=
+  Poly1305.Fast.poly1305_eq_spec key message
+
+/-- **AEAD encryption: fast equals spec.** -/
+theorem fast_encrypt_eq_spec (key : Aead.Fast.Key) (nonce : Aead.Fast.Nonce)
+    (plaintext aad : ByteArray) :
+    (Aead.Fast.encrypt key nonce plaintext aad).data.toList
+      = Aead.Spec.encrypt key.toSpec nonce.toSpec plaintext.data.toList aad.data.toList :=
+  Aead.Fast.encrypt_eq_spec key nonce plaintext aad
+
+/-- **AEAD decryption: fast equals spec** — rejecting exactly the same forgeries, so
+    every result above transfers to the code that runs. -/
+theorem fast_decrypt_eq_spec (key : Aead.Fast.Key) (nonce : Aead.Fast.Nonce)
+    (ciphertextAndTag aad : ByteArray) :
+    (Aead.Fast.decrypt key nonce ciphertextAndTag aad).map (·.data.toList)
+      = Aead.Spec.decrypt key.toSpec nonce.toSpec
+          ciphertextAndTag.data.toList aad.data.toList :=
+  Aead.Fast.decrypt_eq_spec key nonce ciphertextAndTag aad
 
 end LeanChachaPoly.Statements

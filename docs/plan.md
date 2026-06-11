@@ -292,6 +292,19 @@ A second external audit pass drove five changes:
 - **Upstream candidates recorded** (`docs/upstream-candidates.md`): the generic
   `ByteArray ↔ List` kit, `bitConstrained_card`, `zipWith_take_right`.
 
+A follow-up review pass added two refinements:
+
+- **Conditional forgery probability** (`poly1305_tag_forgery_cond_prob`):
+  Bernstein's textbook form `Pr[forge | observed tag t] ≤ ε`, over the one-time
+  key modelled as `(r, s)`. The new content is `observed_card` — the one-time pad
+  makes the observed tag independent of the multiplier `r`, so the denominator is
+  `2¹⁰⁶` for every `t`; `observed_iff_poly1305` ties the value-level event to the
+  byte-level `poly1305 key M = t` via `leToNat16_inj`, so the bound is literally
+  about tag bytes.
+- **`Statements.lean`**: the capstones restated in plain vocabulary, each proved
+  as a one-line corollary of the result it names — a referee's reading list that
+  breaks the build if a capstone's statement drifts (complementing `AxiomGuard`).
+
 ## Future work
 
 - **Drop the last axiom.** Reprove the quarter-round round-trips algebraically (from

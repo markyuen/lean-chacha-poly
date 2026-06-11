@@ -4,6 +4,7 @@ import Tests.Poly1305Test
 import Tests.ChaCha20Poly1305Test
 import Tests.PropertiesTest
 import Tests.FastTest
+import Tests.WycheproofTest
 
 def main : IO Unit := do
   IO.println "=== lean-chacha-poly test suite ==="
@@ -14,4 +15,5 @@ def main : IO Unit := do
   Tests.ChaCha20Poly1305Test.runTests
   Tests.PropertiesTest.runTests
   Tests.FastTest.runTests
+  Tests.WycheproofTest.runTests
   IO.println "=== done ==="

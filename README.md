@@ -119,9 +119,12 @@ should transfer to any Lean 4 project with a hot path.
 
 The spec is directly executable: the test suite (`lake exe test`) runs it against the
 RFC 8439 vectors, runs the same vectors through the fast implementation, and
-differentially checks fast against spec on block-boundary lengths;
-`Tests/AxiomGuard.lean` re-checks every capstone's axiom set at compile time (the
-build fails if one silently grows).
+differentially checks fast against spec on block-boundary lengths. It also runs the
+316 Wycheproof ChaCha20-Poly1305 cases with a 96-bit nonce (`Tests/WycheproofTest.lean`,
+256 `valid` + 60 `invalid`: modified tags, edge-case ciphertexts and Poly1305 keys,
+truncations) — adversarial coverage of the one leap the proofs cannot reach, that the
+spec matches RFC 8439. `Tests/AxiomGuard.lean` re-checks every capstone's axiom set at
+compile time (the build fails if one silently grows).
 
 ## How length/size invariants are encoded
 
@@ -196,10 +199,13 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
   already present) would remove even that — see future work.
 
 - **Constant-time / side-channel resistance.** The proofs are about input→output values;
-  they say nothing about timing, caches, or power. One spot deserves a name: `decrypt`'s
-  tag check (`recvTag == expTag.val`) is a short-circuiting comparison — the classic MAC
-  timing leak if executed as written. Constant-time execution is a compiler/hardware
-  property outside Lean's evaluation model.
+  they say nothing about timing, caches, or power. The canonical `decrypt` compares tags
+  with a short-circuiting `recvTag == expTag.val` — the classic MAC timing leak if
+  executed as written. `decryptCT` removes that branch at the source level (a whole-tag
+  `ctEq`: equal lengths and a zero OR-accumulation of per-byte XORs), and
+  `decryptCT_eq_decrypt` proves it computes the same function. This removes the named
+  source-level short-circuit but is not a runtime guarantee: constant-time execution of
+  the compiled comparison is a compiler/hardware property outside Lean's evaluation model.
 
 - **Nonce-reuse safety and message-length limits.** Reusing a `(key, nonce)` pair is
   catastrophic for Poly1305, and the 32-bit block counter wraps on messages over
@@ -231,5 +237,7 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 - D. J. Bernstein, *ChaCha, a variant of Salsa20* (2008)
 - D. J. Bernstein, *The Poly1305-AES message-authentication code* (2005)
 - [primefactor-io/xchacha20-poly1305](https://github.com/primefactor-io/xchacha20-poly1305)
-  — the `Tests/` suite is a 1:1 port of this Go implementation's test files (the RFC 8439
-  vectors themselves are from the RFC).
+  — the RFC-vector `Tests/` are a 1:1 port of this Go implementation's test files (the RFC
+  8439 vectors themselves are from the RFC).
+- [C2SP/wycheproof](https://github.com/C2SP/wycheproof) — `testvectors_v1/chacha20_poly1305_test.json`,
+  the source of `Tests/WycheproofTest.lean` (the 96-bit-nonce cases).

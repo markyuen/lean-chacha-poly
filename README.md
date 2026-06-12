@@ -7,13 +7,14 @@ It verifies three complementary layers:
 
 1. **Functional correctness** — the spec computes the right bytes (it matches the RFC
    test vectors) and `decrypt ∘ encrypt = id`.
-2. **Information-theoretic security** — Poly1305 is an almost-universal hash, so a
-   forger's success probability is bounded by `8⌈L/16⌉ / 2¹⁰⁶`. The bound holds
-   against every deterministic forger as a theorem, not a prose argument: a forger
-   is a function `A` from the observed tag to a forged `(message, tag)`, and
-   `poly1305_adversary_forgery_prob` bounds the fraction of consistent clamped keys
-   it forges; `poly1305_adversary_forgery_multi_prob` adds the `v`-attempt union
-   bound `v · 8⌈L/16⌉ / 2¹⁰⁶`. The bound involves no computational hardness
+2. **Information-theoretic security** — Poly1305 is an almost-universal hash, so an
+   attacker who observes the genuine tag on `M` and then forges a tag on `M' ≠ M`
+   succeeds with probability at most `8⌈L/16⌉ / 2¹⁰⁶` — Bernstein's conditional
+   bound (`poly1305_tag_forgery_cond_prob`). It holds against every deterministic
+   forger as a theorem, not a prose argument: a forger is a function `A` from the
+   observed tag to a forged `(message, tag)`, and `poly1305_adversary_forgery_prob`
+   quantifies the same bound over all such `A`; `poly1305_adversary_forgery_multi_prob`
+   adds the `v`-attempt union bound `v · 8⌈L/16⌉ / 2¹⁰⁶`. The bound involves no computational hardness
    assumption; its one mathematical hypothesis, the primality of `2¹³⁰ − 5`, is
    discharged by an axiom-free Lucas/Pratt certificate (`prime_P`), so the bounds
    are unconditional.
@@ -45,7 +46,8 @@ and proved as a one-line corollary in one file — see
 
 | Theorem | File | Statement |
 |---|---|---|
-| `poly1305_tag_forgery_prob` | `Poly1305/Security` | The published Poly1305 forgery probability, stated about `poly1305` and its 16-byte tags: with `r` uniform over the `2¹⁰⁶` clamped keys, turning an observed tag on `M` into a tag on `M' ≠ M` succeeds with probability at most `8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`. |
+| `poly1305_tag_forgery_cond_prob` | `Poly1305/Security` | Bernstein's conditional form: an attacker who observes the genuine tag `t` on `M` and then forges a tag on `M' ≠ M` succeeds with conditional probability `Pr[forge \| observed t] ≤ 8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`. The one-time pad makes the observed tag independent of the multiplier `r` (`observed_card`: the denominator is `2¹⁰⁶` regardless of `t`), so conditioning does not help the forger. |
+| `poly1305_tag_forgery_prob` | `Poly1305/Security` | The same bound as an unconditional key count — the published Poly1305 forgery probability, stated about `poly1305` and its 16-byte tags: with `r` uniform over the `2¹⁰⁶` clamped keys, the fraction turning a tag on `M` into a tag on `M' ≠ M` is at most `8·max ⌈\|M\|/16⌉ ⌈\|M'\|/16⌉ / 2¹⁰⁶`. |
 | `poly1305_adversary_forgery_prob` (+ `_multi_prob`) | `Poly1305/Security` | The same bound quantified over every deterministic attacker: for any forger `A : tag → (message, tag)` with `(A t).1 ≠ M`, the fraction of consistent clamped keys under which `A` forges is at most `ε`; `_multi` unions `v` attempts into `v · 8⌈L/16⌉ / 2¹⁰⁶`. |
 | `poly1305_almost_universal` | `Poly1305/Security` | The mathematical heart: over the field `ZMod P`, two distinct block-lists collide for at most `max #blocks` keys `r` (root-counting on a nonzero difference polynomial). |
 | `prime_P` | `Poly1305/Spec/Primality` | `2¹³⁰ − 5` is prime, by an axiom-free Lucas/Pratt certificate (factor tree and witnesses in [docs/primality-certificate.md](docs/primality-certificate.md)). Supplies `Fact (Nat.Prime P)`, so the bound carries no primality hypothesis. |
@@ -55,9 +57,8 @@ in `GF(2¹³⁰−5)` (`accumulate_eq_poly`), injective block encoding
 lifts the collision bound to distinct messages (`toBlocks_inj`), the
 `2¹⁰⁶`-element clamped key space with uniform fibers sets the denominator
 (`clampImage_card`/`clamp_fiber_card`), and the tag reads back faithfully from
-its bytes (`poly1305_value`). The same bound is also stated in Bernstein's
-conditional form `Pr[forge | observed tag] ≤ ε` (`poly1305_tag_forgery_cond_prob`)
-and at coarser normalizations (`poly1305_tag_forgery`, `poly1305_byte_forgery`).
+its bytes (`poly1305_value`). The same bound is also available at coarser
+normalizations (`poly1305_tag_forgery`, `poly1305_byte_forgery`).
 
 ### ChaCha20 — correctness & structure
 
@@ -65,7 +66,6 @@ and at coarser normalizations (`poly1305_tag_forgery`, `poly1305_byte_forgery`).
 |---|---|---|
 | `chacha20_involutive` | `ChaCha20/Correctness` | Encrypting twice returns the message — encrypt = decrypt for a XOR stream cipher. |
 | `quarterRound_bijective` | `ChaCha20/Spec/Permutation` | The quarter round is a bijection of `UInt32⁴` (with explicit inverse) — why ChaCha20 is permutation-based. |
-| `keystream_counter_shift` | `ChaCha20/Spec/Seek` | CTR seekability: the keystream is random-access by 64-byte block. |
 
 ### AEAD — correctness & authenticity
 
@@ -125,7 +125,8 @@ the 316 Wycheproof ChaCha20-Poly1305 cases (256 `valid` + 60 `invalid`) through
 both the spec and the fast implementation, and differentially checks fast
 against spec on block-boundary lengths — adversarial coverage of the one leap
 the proofs cannot reach, that the spec matches RFC 8439. `Tests/AxiomGuard.lean`
-re-checks every capstone's axiom set at compile time.
+re-checks the axiom set of every capstone — and the key lemmas beneath them — at
+compile time.
 
 ## Layout
 
@@ -138,7 +139,7 @@ LeanChachaPoly/
     Spec/{QuarterRound, Keystream, Seek, Permutation, Xor}.lean
   Poly1305/
     Spec.lean                definitions + basic properties
-    Security.lean            security tower → adversary forgery bounds   ← capstone
+    Security.lean            security tower → forgery bounds             ← capstone
     Injectivity.lean         block-encoding injectivity → toBlocks_inj   ← capstone
     Spec/{Sum, Blocking, Accumulate, Tag, Clamp, Primality}.lean
   Aead/

@@ -3,10 +3,11 @@ import LeanChachaPoly
 /-!
 # Axiom guard
 
-Compile-time enforcement that the capstones' axiom sets never silently grow:
-each `#guard_msgs` below **fails the build** if `#print axioms` reports anything
-other than the recorded set. Every capstone closes over Lean's three foundational
-axioms (`propext`, `Classical.choice`, `Quot.sound`) and nothing else.
+Compile-time enforcement that the axiom sets of the capstones — and the key
+lemmas they rest on — never silently grow: each `#guard_msgs` below **fails the
+build** if `#print axioms` reports anything other than the recorded set. Every
+entry closes over Lean's three foundational axioms (`propext`, `Classical.choice`,
+`Quot.sound`) and nothing else.
 
 If a legitimate change alters an axiom set, update the corresponding doc-comment
 here so the change appears in review.

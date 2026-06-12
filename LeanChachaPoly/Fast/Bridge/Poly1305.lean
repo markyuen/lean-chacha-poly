@@ -245,7 +245,6 @@ private theorem step_freeze (r a b : Nat) :
       = ((a + b) * (r % Poly1305.Spec.P)) % Poly1305.Spec.P := by
   simp [Poly1305.Spec.step, Nat.add_mod, Nat.mul_mod]
 
-set_option maxRecDepth 4000 in
 /-- **Key lemma.** The limb block loop folds `Spec.step` over exactly the
     spec's block values: the loop invariant is the frozen value
     `limbsToNat h % P`, full blocks advance it by `stepLimbs`, and the

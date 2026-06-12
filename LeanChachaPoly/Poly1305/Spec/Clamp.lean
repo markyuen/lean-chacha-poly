@@ -39,7 +39,7 @@ def clampClearedBits : Finset Nat :=
   {28, 29, 30, 31, 60, 61, 62, 63, 92, 93, 94, 95, 124, 125, 126, 127,
    32, 33, 64, 65, 96, 97}
 
-set_option maxRecDepth 4000 in
+set_option maxRecDepth 800 in
 /-- The mask is set exactly off the 22 cleared positions (decided by the kernel). -/
 private theorem mask_bit_char : ∀ j : Fin 128,
     (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit j.val

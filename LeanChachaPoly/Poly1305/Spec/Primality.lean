@@ -20,8 +20,6 @@ powers. The ~25 primes of the recursive factor tree are certified bottom-up.
 See `docs/primality-certificate.md` for the factor tree and witnesses.
 -/
 
-set_option maxRecDepth 16000
-
 namespace Poly1305.Spec.Primality
 
 /-- Fuel-based binary modular exponentiation: `powMod b e m fuel = b^e % m`
@@ -382,6 +380,7 @@ theorem p_4889 : Nat.Prime 4889 :=
     · simp at hx)
     (by decide) (by decide) (by decide)
 
+set_option maxRecDepth 800 in
 theorem p_4024685905107147541 : Nat.Prime 4024685905107147541 :=
   prime_of_powMod 4024685905107147541 2 [2, 2, 3, 3, 5, 13, 43, 4889, 37003, 221101]
     (by decide) (by decide)
@@ -410,6 +409,7 @@ theorem p_4024685905107147541 : Nat.Prime 4024685905107147541 :=
     · simp at hx)
     (by decide) (by decide) (by decide)
 
+set_option maxRecDepth 1400 in
 theorem p_897064739519922787230182993783 : Nat.Prime 897064739519922787230182993783 :=
   prime_of_powMod 897064739519922787230182993783 5 [2, 73, 487, 3134801, 4024685905107147541]
     (by decide) (by decide)
@@ -496,6 +496,7 @@ theorem p_32985101 : Nat.Prime 32985101 :=
     · simp at hx)
     (by decide) (by decide) (by decide)
 
+set_option maxRecDepth 2000 in
 theorem p_1361129467683753853853498429727072845819 : Nat.Prime 1361129467683753853853498429727072845819 :=
   prime_of_powMod 1361129467683753853853498429727072845819 2 [2, 23, 32985101, 897064739519922787230182993783]
     (by decide) (by decide)

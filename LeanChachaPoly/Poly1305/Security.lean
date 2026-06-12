@@ -734,7 +734,6 @@ noncomputable def keySpace : Finset (ZMod P × Nat) :=
   clampedKeys ×ˢ Finset.range (2 ^ 128)
 
 open scoped Classical in
-set_option maxRecDepth 4000 in
 set_option linter.constructorNameAsVariable false in
 /-- **Key lemma (one-time-pad uniformity).** Conditioning on the observed tag does not
     skew the multiplier: for each clamped `r` exactly one pad `s` yields tag `t` on
@@ -785,7 +784,6 @@ theorem observed_iff_poly1305 (key : Key) (M : List UInt8) (t : Bytes 16) :
   exact ⟨fun h => leToNat16_inj h, fun h => by rw [h]⟩
 
 open scoped Classical in
-set_option maxRecDepth 4000 in
 set_option linter.constructorNameAsVariable false in
 /-- **Capstone (conditional form).** Bernstein's textbook statement: an attacker who
     *observes* the genuine tag `t` on `M` and then forges a tag `t'` on `M' ≠ M`

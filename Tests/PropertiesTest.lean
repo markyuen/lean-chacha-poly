@@ -41,21 +41,21 @@ def aeAad   : List UInt8 := hexToList "50515253c0c1c2c3c4c5c6c7"
 
 /-! ## Runner -/
 
-def runTests : IO Unit := do
+def runTests : IO Nat := do
   IO.println "Properties / edge cases"
 
-  group "ChaCha20" do
+  let f1 ← group "ChaCha20" do
     let ct := chacha20 chaKey chaNonce 1 chaPt
     return [
       ← checkBool "length preserved" (ct.length == chaPt.length),
       ← check     "keystream (A.1 #1)" ksExpected (keystream ksKey ksNonce 0 64)
     ]
 
-  group "Poly1305" do
+  let f2 ← group "Poly1305" do
     let tag := (poly1305 polyKey (asciiToList "test")).val
     return [← checkBool "tag is always 16 bytes" (tag.length == 16)]
 
-  group "ChaCha20-Poly1305 AEAD" do
+  let f3 ← group "ChaCha20-Poly1305 AEAD" do
     let ct := encrypt aeKey aeNonce chaPt aeAad
     let lengthOk := ct.length == chaPt.length + 16
     -- Flip one bit in the ciphertext body (not the tag).
@@ -75,5 +75,6 @@ def runTests : IO Unit := do
     ]
 
   IO.println ""
+  return f1 + f2 + f3
 
 end Tests.PropertiesTest

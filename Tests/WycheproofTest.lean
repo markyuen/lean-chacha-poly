@@ -386,18 +386,19 @@ def runOneFast (tv : WTV) : IO Bool := do
   else
     checkBool s!"tc{tv.tcId} {tv.comment} (rejected)" (dec == none)
 
-def runTests : IO Unit := do
+def runTests : IO Nat := do
   IO.println "Wycheproof ChaCha20-Poly1305 (ivSize=96)"
-  group "wycheproof (spec)" do
+  let f1 ← group "wycheproof (spec)" do
     let mut results := #[]
     for tv in vectors do
       results := results.push (← runOne tv)
     return results.toList
-  group "wycheproof (fast)" do
+  let f2 ← group "wycheproof (fast)" do
     let mut results := #[]
     for tv in vectors do
       results := results.push (← runOneFast tv)
     return results.toList
   IO.println ""
+  return f1 + f2
 
 end Tests.WycheproofTest

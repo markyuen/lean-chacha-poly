@@ -52,7 +52,6 @@ def wordsToHex (ws : Array UInt32) : String :=
 
 def check (name : String) (expected actual : List UInt8) : IO Bool := do
   if expected == actual then
-    IO.println s!"  ✓ {name}"
     return true
   else
     IO.println s!"  ✗ {name}"
@@ -62,7 +61,6 @@ def check (name : String) (expected actual : List UInt8) : IO Bool := do
 
 def checkWords (name : String) (expected actual : Array UInt32) : IO Bool := do
   if expected == actual then
-    IO.println s!"  ✓ {name}"
     return true
   else
     IO.println s!"  ✗ {name}"
@@ -72,15 +70,18 @@ def checkWords (name : String) (expected actual : Array UInt32) : IO Bool := do
 
 def checkBool (name : String) (cond : Bool) : IO Bool := do
   if cond then
-    IO.println s!"  ✓ {name}"; return true
+    return true
   else
     IO.println s!"  ✗ {name}"; return false
 
-def group (name : String) (tests : IO (List Bool)) : IO Unit := do
+/-- Run a group of checks, print its `ok/total` line, and return the number of
+    failures so callers can thread it up to `main`'s exit code. -/
+def group (name : String) (tests : IO (List Bool)) : IO Nat := do
   IO.println s!"  [{name}]"
   let r ← tests
   let ok := r.filter id |>.length
   IO.println s!"  {ok}/{r.length} passed"
+  return r.length - ok
 
 /-! ## Smart constructors
 

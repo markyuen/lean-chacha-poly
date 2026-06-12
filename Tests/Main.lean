@@ -6,14 +6,24 @@ import Tests.PropertiesTest
 import Tests.FastTest
 import Tests.WycheproofTest
 
-def main : IO Unit := do
+/-- Returns the process exit code: `0` if every check passed, `1` otherwise, so
+    `lake exe test` (and CI) fails on a vector mismatch rather than only printing
+    a `✗`. -/
+def main : IO UInt32 := do
   IO.println "=== lean-chacha-poly test suite ==="
   IO.println "(RFC 8439 test vectors, ported 1:1 from the Go suite)"
   IO.println ""
-  Tests.ChaCha20Test.runTests
-  Tests.Poly1305Test.runTests
-  Tests.ChaCha20Poly1305Test.runTests
-  Tests.PropertiesTest.runTests
-  Tests.FastTest.runTests
-  Tests.WycheproofTest.runTests
+  let mut fails := 0
+  fails := fails + (← Tests.ChaCha20Test.runTests)
+  fails := fails + (← Tests.Poly1305Test.runTests)
+  fails := fails + (← Tests.ChaCha20Poly1305Test.runTests)
+  fails := fails + (← Tests.PropertiesTest.runTests)
+  fails := fails + (← Tests.FastTest.runTests)
+  fails := fails + (← Tests.WycheproofTest.runTests)
   IO.println "=== done ==="
+  if fails == 0 then
+    IO.println "All checks passed."
+    return 0
+  else
+    IO.eprintln s!"{fails} check(s) failed."
+    return 1

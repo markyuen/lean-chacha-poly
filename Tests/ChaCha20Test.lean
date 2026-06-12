@@ -151,17 +151,17 @@ def enc_a2_3_expected : List UInt8 := hexToList
 
 /-! ## Runner -/
 
-def runTests : IO Unit := do
+def runTests : IO Nat := do
   IO.println "ChaCha20"
 
-  group "quarter round" do
+  let f1 ← group "quarter round" do
     return [
       ← checkBool  "§2.1.1 four words"  qr_2_1_1,
       ← checkWords "§2.2.1 on state"    qr_2_2_1_expected
         (qr ⟨qr_2_2_1_state, by decide⟩ ⟨2, by omega⟩ ⟨7, by omega⟩ ⟨8, by omega⟩ ⟨13, by omega⟩).val
     ]
 
-  group "block function" do
+  let f2 ← group "block function" do
     return [
       ← checkWords "§2.3.2"   block_2_3_2_expected (chacha20Block block_2_3_2_key block_2_3_2_nonce 1).val,
       ← checkWords "A.1 #1"   block_a1_1_expected  (chacha20Block block_a1_1_key  block_a1_1_nonce  0).val,
@@ -171,7 +171,7 @@ def runTests : IO Unit := do
       ← checkWords "A.1 #5"   block_a1_5_expected  (chacha20Block block_a1_5_key  block_a1_5_nonce  0).val
     ]
 
-  group "XOR with keystream" do
+  let f3 ← group "XOR with keystream" do
     return [
       ← check "§2.4.2 sunscreen" enc_2_4_2_expected (chacha20 enc_2_4_2_key enc_2_4_2_nonce 1 enc_2_4_2_pt),
       ← check "A.2 #1"           enc_a2_1_expected  (chacha20 enc_a2_1_key  enc_a2_1_nonce  0 enc_a2_1_pt),
@@ -179,11 +179,12 @@ def runTests : IO Unit := do
       ← check "A.2 #3"           enc_a2_3_expected  (chacha20 enc_a2_3_key  enc_a2_3_nonce  42 enc_a2_3_pt)
     ]
 
-  group "encryption + decryption" do
+  let f4 ← group "encryption + decryption" do
     let ct := chacha20 enc_2_4_2_key enc_2_4_2_nonce 1 enc_2_4_2_pt
     let pt := chacha20 enc_2_4_2_key enc_2_4_2_nonce 1 ct
     return [← checkBool "roundtrip" (pt == enc_2_4_2_pt)]
 
   IO.println ""
+  return f1 + f2 + f3 + f4
 
 end Tests.ChaCha20Test

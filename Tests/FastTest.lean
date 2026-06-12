@@ -73,10 +73,10 @@ def aeadChecks : IO (List Bool) := do
 
 /-! ## Runner -/
 
-def runTests : IO Unit := do
+def runTests : IO Nat := do
   IO.println "Fast implementation"
 
-  group "block function (fast)" do
+  let f1 ← group "block function (fast)" do
     let blk (k : ChaCha20.Spec.Key) (n : ChaCha20.Spec.Nonce) (ctr : UInt32) :
         Array UInt32 :=
       (ChaCha20.Fast.block (fastKey k) (fastNonce n) ctr).toState.val
@@ -95,7 +95,7 @@ def runTests : IO Unit := do
         (blk Tests.ChaCha20Test.block_a1_5_key Tests.ChaCha20Test.block_a1_5_nonce 0)
     ]
 
-  group "XOR with keystream (fast)" do
+  let f2 ← group "XOR with keystream (fast)" do
     let enc (k : ChaCha20.Spec.Key) (n : ChaCha20.Spec.Nonce) (ctr : UInt32)
         (pt : List UInt8) : List UInt8 :=
       (ChaCha20.Fast.chacha20 (fastKey k) (fastNonce n) ctr pt.toByteArray).data.toList
@@ -114,16 +114,16 @@ def runTests : IO Unit := do
           Tests.ChaCha20Test.enc_a2_3_pt)
     ]
 
-  group "Poly1305 tag (fast)" do
+  let f3 ← group "Poly1305 tag (fast)" do
     let mut results := #[]
     for tv in Tests.Poly1305Test.tvs do
       results := results.push (← check tv.name tv.tag
         (Poly1305.Fast.poly1305 (fastPolyKey tv.key) tv.msg.toByteArray).data.toList)
     return results.toList
 
-  group "AEAD (fast)" aeadChecks
+  let f4 ← group "AEAD (fast)" aeadChecks
 
-  group "limb vs nat engine" do
+  let f5 ← group "limb vs nat engine" do
     -- The limb engine must agree with the Nat engine for every r (it reduces
     -- r % P internally; equal by Nat.mul_mod), including r ≥ P and r = 0.
     let keys : List (String × Nat) := [
@@ -141,7 +141,7 @@ def runTests : IO Unit := do
       results := results.push (← checkBool name ok)
     return results.toList
 
-  group "fused vs two-pass" do
+  let f6 ← group "fused vs two-pass" do
     -- The fused chacha20 must agree with the retained two-pass composition
     -- across block-boundary lengths (hits all three chacha20Go cases).
     -- Proved by chacha20_eq_twoPass; this exercises the compiled paths.
@@ -155,7 +155,7 @@ def runTests : IO Unit := do
       results := results.push (← checkBool s!"len {len}" ok)
     return results.toList
 
-  group "fused vs push-pass" do
+  let f7 ← group "fused vs push-pass" do
     -- The set-based in-place chacha20 must agree with the retained push-based
     -- engine across block-boundary lengths (hits all three chacha20SetGo
     -- cases). Proved by chacha20_eq_pushPass; this exercises the compiled paths.
@@ -169,7 +169,7 @@ def runTests : IO Unit := do
       results := results.push (← checkBool s!"len {len}" ok)
     return results.toList
 
-  group "differential fast vs spec" do
+  let f8 ← group "differential fast vs spec" do
     let specKey := (ChaCha20.Spec.Key.ofBytes? (randList 1 32)).get!
     let specNonce := (ChaCha20.Spec.Nonce.ofBytes? (randList 2 12)).get!
     let specPolyKey := (Poly1305.Spec.Key.ofBytes? (randList 3 32)).get!
@@ -208,5 +208,6 @@ def runTests : IO Unit := do
     return results.toList
 
   IO.println ""
+  return f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8
 
 end Tests.FastTest

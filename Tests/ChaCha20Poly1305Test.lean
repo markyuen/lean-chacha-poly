@@ -91,23 +91,23 @@ def decWantPt : List UInt8 := hexToList
 
 /-! ## Runner -/
 
-def runTests : IO Unit := do
+def runTests : IO Nat := do
   IO.println "ChaCha20-Poly1305 AEAD"
 
-  group "TestChaCha20Poly1305Poly1305KeyGen" do
+  let f1 ← group "TestChaCha20Poly1305Poly1305KeyGen" do
     let mut results := #[]
     for tv in kgTvs do
       results := results.push (← check tv.name tv.expected (derivePolyKey tv.key tv.nonce).val)
     return results.toList
 
-  group "TestChaCha20Poly1305Encrypt" do
+  let f2 ← group "TestChaCha20Poly1305Encrypt" do
     let out := encrypt encKey encNonce encPt encAad
     return [
       ← check "§2.8.2 ciphertext" encWantCt  (out.take encPt.length),
       ← check "§2.8.2 tag"        encWantTag (out.drop encPt.length)
     ]
 
-  group "TestChaCha20Poly1305Decrypt" do
+  let f3 ← group "TestChaCha20Poly1305Decrypt" do
     let a5 ← match decrypt decKey decNonce (decCt ++ decTag) decAad with
       | some pt => check "A.5 plaintext" decWantPt pt
       | none    => checkBool "A.5 decrypt succeeded" false
@@ -115,11 +115,12 @@ def runTests : IO Unit := do
       (decrypt decKey decNonce (decCt ++ decBadTag) decAad == none)
     return [a5, ← bad]
 
-  group "TestChaCha20Poly1305 (encryption + decryption)" do
+  let f4 ← group "TestChaCha20Poly1305 (encryption + decryption)" do
     let ct := encrypt encKey encNonce encPt encAad
     let pt := decrypt encKey encNonce ct encAad
     return [← checkBool "roundtrip" (pt == some encPt)]
 
   IO.println ""
+  return f1 + f2 + f3 + f4
 
 end Tests.ChaCha20Poly1305Test

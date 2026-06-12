@@ -101,13 +101,14 @@ def tvs : List TV := [
     tag  := hexToList "13000000000000000000000000000000" }
 ]
 
-def runTests : IO Unit := do
+def runTests : IO Nat := do
   IO.println "Poly1305"
-  group "TestPoly1305GenerateTag" do
+  let f1 ← group "TestPoly1305GenerateTag" do
     let mut results := #[]
     for tv in tvs do
       results := results.push (← check tv.name tv.tag (poly1305 tv.key tv.msg).val)
     return results.toList
   IO.println ""
+  return f1
 
 end Tests.Poly1305Test

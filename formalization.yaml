@@ -1,0 +1,287 @@
+# formalization.yaml (v0.3): repo-root metadata for this formalization.
+# Schema: https://github.com/mathlib-initiative/formalization.yaml
+# Requiredness: fields marked [required] are filled; others are recommended metadata.
+
+version: "v0.3"
+
+# project - the formalization itself (not the source).
+project:
+  name: "lean-chacha-poly"                                   # [required]
+  authors:                                                   # [required]
+    - "Mark Yuen"
+    - "Claude (Anthropic, via Claude Code)"                  # AI agent; see `automation`
+  license: "Apache-2.0"                                      # [required] see ./LICENSE
+
+# sources - what was formalized.
+sources:                                                     # [required]
+  - title: "RFC 8439: ChaCha20 and Poly1305 for IETF Protocols"   # [required]
+    authors: ["Y. Nir", "A. Langley"]                        # [required]
+    id: "https://www.rfc-editor.org/rfc/rfc8439"             # [required]
+    type: "specification"
+    license: "IETF Trust / RFC"
+    author_contacted: "n/a"
+    note: "Primary source. The algorithm, the byte-level construction, and the
+      worked test vectors all come from here."
+  - title: "ChaCha, a variant of Salsa20"
+    authors: ["D. J. Bernstein"]
+    id: "https://cr.yp.to/chacha/chacha-20080128.pdf"
+    type: "paper"
+    author_contacted: "n/a"
+  - title: "The Poly1305-AES message-authentication code"
+    authors: ["D. J. Bernstein"]
+    id: "https://cr.yp.to/mac/poly1305-20050329.pdf"
+    type: "paper"
+    author_contacted: "n/a"
+    note: "Source of the conditional forgery bound 8*ceil(L/16)/2^106 that the
+      Poly1305 security tower proves, and of the donna-style limb-arithmetic
+      strategy reused in the fast implementation."
+  - title: "primefactor-io/xchacha20-poly1305 (Go reference implementation)"
+    authors: ["primefactor-io"]
+    id: "https://github.com/primefactor-io/xchacha20-poly1305"
+    type: "reference implementation / test vectors"
+    author_contacted: "n/a"
+    note: "The RFC-vector test files in Tests/ are a 1:1 port of this repo's test
+      files (the vectors themselves are the RFC's). Pinned at upstream HEAD
+      6bff6e2 as of 2026-06-11."
+  - title: "C2SP/wycheproof — chacha20_poly1305_test.json"
+    authors: ["C2SP / Project Wycheproof contributors"]
+    id: "https://github.com/C2SP/wycheproof"
+    type: "test vectors"
+    author_contacted: "n/a"
+    note: "Source of Tests/WycheproofTest.lean (the 96-bit-nonce cases, 256 valid
+      + 60 invalid). File last changed upstream at e0df04e (repo HEAD 6d7cccd as
+      of 2026-06-11)."
+
+# project status
+status:
+  scope: >-
+    Full RFC 8439 ChaCha20-Poly1305 AEAD, in three layers. (1) Functional
+    correctness: the spec matches the RFC test vectors (and the Wycheproof
+    vectors), and decrypt . encrypt = id. (2) Information-theoretic security: the
+    Poly1305 forgery bound 8*ceil(L/16)/2^106 in Bernstein's conditional form,
+    quantified over every deterministic forger (a function from the observed tag
+    to a forged message/tag), joined to an AEAD forgery bound under an explicit
+    uniform-poly-key hypothesis; the bound's one mathematical assumption, the
+    primality of 2^130 - 5, is discharged by an axiom-free Lucas/Pratt
+    certificate. (3) A ByteArray "fast" implementation proved equal to the spec
+    on every input, so the vectors, the roundtrip, and the forgery bounds all
+    transfer to the executable code. Out of scope by nature (documented in the
+    README "what is NOT covered" section): ChaCha20 PRF/confidentiality (a
+    computational game, not a theorem about the function), constant-time /
+    side-channel resistance, nonce-reuse safety, the 32-bit counter wrap at
+    ~256 GiB, and trust in the Lean compiler/runtime for execution.
+  sorry_count: 0
+  sorry_in_definitions: 0
+  axioms:                          # the whole library closes over exactly these three.
+    - "propext"
+    - "Classical.choice"
+    - "Quot.sound"
+    # No native_decide / ofReduceBool / @[extern] / bv_decide SAT-cert axioms
+    # remain anywhere; pinned at compile time in Tests/AxiomGuard.lean.
+  main_results:
+    # --- ChaCha20: correctness & structure ---
+    - declaration: "ChaCha20.Spec.chacha20_involutive"
+      file: "LeanChachaPoly/ChaCha20/Correctness.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "ChaCha20.Spec.quarterRound_bijective"
+      file: "LeanChachaPoly/ChaCha20/Spec/Permutation.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    # --- Poly1305: security ---
+    - declaration: "Poly1305.Spec.poly1305_tag_forgery_cond_prob"
+      file: "LeanChachaPoly/Poly1305/Security.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Poly1305.Spec.poly1305_adversary_forgery_prob"
+      file: "LeanChachaPoly/Poly1305/Security.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Poly1305.Spec.poly1305_almost_universal"
+      file: "LeanChachaPoly/Poly1305/Security.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Poly1305.Spec.prime_P"
+      file: "LeanChachaPoly/Poly1305/Spec/Primality.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    # --- AEAD: correctness & authenticity ---
+    - declaration: "Aead.Spec.decrypt_encrypt"
+      file: "LeanChachaPoly/Aead/Correctness.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Aead.Spec.decrypt_verifies"
+      file: "LeanChachaPoly/Aead/Security.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Aead.Spec.aead_forgery_prob"
+      file: "LeanChachaPoly/Aead/Security.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+      literature_dependencies:
+        - statement: >-
+            The ChaCha20-derived one-time Poly1305 key is uniform over the clamped
+            key space (the ChaCha20-PRF idealization). This is stated as an
+            explicit hypothesis of the theorem, not proved; it is the standard
+            computational assumption ChaCha20 confidentiality would supply.
+          source: "RFC 8439 (S2.6, key derivation); Bernstein, Poly1305-AES"
+    # --- Fast implementation: equivalence bridges ---
+    - declaration: "ChaCha20.Fast.chacha20_eq_spec"
+      file: "LeanChachaPoly/Fast/Bridge/ChaCha20.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Poly1305.Fast.poly1305_eq_spec"
+      file: "LeanChachaPoly/Fast/Bridge/Poly1305.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Aead.Fast.encrypt_eq_spec"
+      file: "LeanChachaPoly/Fast/Bridge/Aead.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+    - declaration: "Aead.Fast.decrypt_eq_spec"
+      file: "LeanChachaPoly/Fast/Bridge/Aead.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: ""
+
+# how it was produced.
+automation:                                                  # [required]
+  methods:
+    - method: "agent"                                        # [required]
+      models:
+        - "claude-opus-4-x"        # primary formalization; exact minor version
+                                   # (4.6/4.7/4.8) varied over the project span
+        - "claude-sonnet-4-x"      # formalization and Plan/Explore subagents
+        - "claude-fable-5"         # primarily an independent auditor while available
+      framework: "Claude Code"
+      tool_setup: >-
+        Interactive Claude Code sessions. Plan and Explore subagents were used to
+        prototype and pre-validate proofs and runtime optimizations before
+        transcription into the repo; Fable was used mainly as an independent
+        auditor of completed work. A compile-time axiom guard
+        (Tests/AxiomGuard.lean) and a CI workflow gate the result.
+      cost:
+        wall_time: "~1.5 weeks (2026-06-05 to 2026-06-14)"
+        spend_usd: "subscription-based usage"
+        hardware: "Apple M2 laptop; API/subscription, no GPU"
+      prompting_notes: >-
+        Spec-first, then a verified fast layer. Recurring discipline: prototype an
+        optimization or proof on a throwaway branch, MEASURE it against a >=x%
+        throughput gate before adopting (some candidates were measured and
+        reverted below the gate), and keep every superseded engine alongside an
+        "engines agree on all inputs" corollary. Repeated self-audit passes
+        ("re-audit after each change") drove the axiom-clean final state.
+  spend_usd: "subscription-based usage"
+  notes: >-
+    Predominantly agent-driven across many sessions over ~1.5 weeks. Sonnet and
+    Opus did the formalization; Fable acted mainly as an auditor while it was
+    available. The development log, phase by phase, is in docs/plan.md.
+
+# fidelity
+fidelity:
+  divergences: >-
+    The spec tracks RFC 8439 directly; deviations are deliberate and proved
+    consistent. (1) The Poly1305 security result is stated in Bernstein's
+    conditional / adversary-quantified form (probability over a uniform clamped
+    key, quantified over deterministic forgers), which is stronger and more
+    explicit than the RFC's prose, not a different claim. (2) The "fast"
+    implementation uses poly1305-donna-style 5x26-bit UInt64 limb arithmetic and a
+    fused register-threaded ChaCha20 pass with in-place USize-indexed XOR writes;
+    these are implementation strategies (from donna / Bernstein), not the RFC's
+    presentation, and each is proved equal to the spec on every input
+    (*_eq_spec). (3) The AEAD forgery bound takes the ChaCha20-PRF idealization
+    (uniform one-time poly key) as an explicit theorem hypothesis rather than
+    proving it -- ChaCha20 PRF security is a computational claim outside plain
+    Lean. (4) The spec's reference `decrypt` keeps a short-circuiting `==` for
+    readability; a constant-time variant `decryptCT` (and `decryptCT_eq_decrypt`)
+    is provided, and the fast path compares whole tags with `ctEq`. This removes
+    the source-level short-circuit but is not a hardware constant-time guarantee.
+    (5) Length constraints are encoded as subtypes (Bytes n, Words n, State =
+    Words 16) rather than runtime checks. (6) Usage constraints the RFC states in
+    prose -- nonce non-reuse and the 32-bit counter wrap at ~256 GiB -- are NOT
+    carried as theorem hypotheses; they are documented, not enforced.
+
+# review status
+review:
+  status: "self-assessed"                                    # [required]
+  reviewers:
+    - "Claude (Claude Code) -- multiple internal audit passes"
+    - "Fable -- independent auditor while available"
+  notes: >-
+    No external or human peer review. The artifact went through several agent-run
+    audit passes (logged in docs/plan.md), each followed by a re-audit after the
+    fixes. Standing machine checks: Tests/AxiomGuard.lean pins every capstone's
+    axiom set with #guard_msgs and FAILS THE BUILD if any set changes; `lake exe
+    test` runs the RFC 8439 and Wycheproof vectors plus boundary-length
+    differential tests through BOTH the spec and the fast implementation; a CI
+    workflow runs the build and tests. No leanprover/comparator config is used.
+
+# alignment - how RFC 8439 maps onto the Lean declarations.
+alignment:
+  namespace: "ChaCha20.Spec / Poly1305.Spec / Aead.Spec (with *.Fast bridges)"
+  statements:
+    - source: "RFC 8439 S2.1 -- The ChaCha Quarter Round"
+      lean: "ChaCha20.Spec.quarterRound (+ quarterRound_bijective)"
+      module: "LeanChachaPoly/ChaCha20/Spec/QuarterRound.lean, Permutation.lean"
+      status: "proved"
+      note: "quarterRound_bijective gives an explicit inverse: the round is a UInt32^4 permutation."
+    - source: "RFC 8439 S2.3 -- The ChaCha20 Block Function"
+      lean: "ChaCha20.Spec.block"
+      module: "LeanChachaPoly/ChaCha20/Spec/Keystream.lean"
+      status: "proved"
+    - source: "RFC 8439 S2.4 -- The ChaCha20 Encryption Algorithm"
+      lean: "ChaCha20.Spec.chacha20 (+ chacha20_involutive)"
+      module: "LeanChachaPoly/ChaCha20/Spec.lean, Correctness.lean"
+      status: "proved"
+    - source: "RFC 8439 S2.5 -- The Poly1305 Algorithm (incl. clamp)"
+      lean: "Poly1305.Spec.poly1305, Poly1305.Spec.clamp"
+      module: "LeanChachaPoly/Poly1305/Spec.lean, Spec/Clamp.lean"
+      status: "proved"
+    - source: "RFC 8439 S2.5 -- Poly1305 forgery probability"
+      lean: "Poly1305.Spec.poly1305_tag_forgery_cond_prob (+ _prob, _adversary_*)"
+      module: "LeanChachaPoly/Poly1305/Security.lean"
+      status: "proved"
+      note: "8*ceil(L/16)/2^106, conditional form, quantified over deterministic forgers."
+    - source: "Primality of 2^130 - 5 (Bernstein)"
+      lean: "Poly1305.Spec.prime_P"
+      module: "LeanChachaPoly/Poly1305/Spec/Primality.lean"
+      status: "proved"
+      note: "Axiom-free Lucas/Pratt certificate; supplies Fact (Nat.Prime P). See docs/primality-certificate.md."
+    - source: "RFC 8439 S2.6 -- Generating the Poly1305 Key Using ChaCha20"
+      lean: "Aead.Spec.derivePolyKey"
+      module: "LeanChachaPoly/Aead/Spec/KeyDerivation.lean"
+      status: "proved"
+    - source: "RFC 8439 S2.8 -- AEAD Construction"
+      lean: "Aead.Spec.encrypt / decrypt, decrypt_encrypt, macData, macData_inj"
+      module: "LeanChachaPoly/Aead/Spec.lean, Correctness.lean, Security.lean, Spec/MacData.lean"
+      status: "proved"
+    - source: "RFC 8439 S2.6.2 / S2.8.2 -- worked test vectors"
+      lean: "Tests/* (RFC vectors) + WycheproofTest"
+      module: "Tests/"
+      status: "proved"
+      note: "Run through spec and fast (lake exe test)."
+    - source: "ChaCha20 PRF / confidentiality"
+      lean: "(taken as a hypothesis of Aead.Spec.aead_forgery_prob)"
+      module: "LeanChachaPoly/Aead/Security.lean"
+      status: "literature-dependency"
+      note: "Computational assumption; not provable in plain Lean. Isolated as the one model hypothesis."
+
+# acknowledgements
+acknowledgements: >-
+  Built on Lean 4 (toolchain leanprover/lean4:v4.29.1) and Mathlib (pinned to the
+  matching v4.29.1). Mathlib is confined to the spec/security proofs and the
+  compile-time Fast/Bridge/ modules; the fast implementation and the bench
+  executable link no Mathlib. Test vectors are ported from
+  primefactor-io/xchacha20-poly1305 (RFC 8439) and C2SP/wycheproof.

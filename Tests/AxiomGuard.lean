@@ -35,6 +35,9 @@ here so the change appears in review.
 /-- info: 'Poly1305.Spec.clamp_fiber_card' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Poly1305.Spec.clamp_fiber_card
 
+/-- info: 'Poly1305.Spec.poly1305_almost_universal' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Poly1305.Spec.poly1305_almost_universal
+
 /-- info: 'Poly1305.Spec.poly1305_almost_universal_msg'' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Poly1305.Spec.poly1305_almost_universal_msg'
 

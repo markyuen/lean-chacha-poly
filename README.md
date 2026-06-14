@@ -1,5 +1,11 @@
 # lean-chacha-poly
 
+> [!WARNING]
+> **Unreviewed, AI-produced artifact.** This was produced by AI agents (Claude, via
+> Claude Code) directed by a software engineer, not a cryptographer. The Lean source
+> has not been hand-reviewed line by line, and the mathematics and cryptography have
+> not been checked by a domain expert.
+
 A machine-checked **Lean 4** verification of RFC 8439 **ChaCha20-Poly1305 AEAD** —
 the AEAD cipher suite preferred by TLS 1.3, WireGuard, and SSH.
 
@@ -224,3 +230,7 @@ This project proves what is *provable in Lean about the algorithm*. It deliberat
 - [C2SP/wycheproof](https://github.com/C2SP/wycheproof) — `testvectors_v1/chacha20_poly1305_test.json`,
   the source of `Tests/WycheproofTest.lean` (the 96-bit-nonce cases). That file was last
   changed upstream at commit `e0df04e` (repo HEAD `6d7cccd` as of 2026-06-11).
+
+## License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE).
